@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# App data (databases, ledgers, caches)
+*.db
+*.db-wal
+*.db-shm
+data/
+cache/
+
+# Local strategy/state dirs
+.trade-monitor/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
