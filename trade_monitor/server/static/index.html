@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trade-monitor</title>
+<style>
+  :root {
+    --bg: #0e1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --amber: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background: var(--bg); color: var(--text); }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border);
+           display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .ver { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1fr 380px; height: calc(100vh - 61px); }
+  .layout > div { overflow: auto; padding: 20px 24px; }
+  .right { border-left: 1px solid var(--border); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--muted); margin: 0 0 12px; }
+  button { background: var(--accent); color: #04121f; border: 0; border-radius: 6px;
+           padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button.ghost { background: transparent; color: var(--text);
+                 border: 1px solid var(--border); font-weight: 400; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+           gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border);
+          border-radius: 8px; padding: 14px; cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
+  .card .sym { font-weight: 700; font-size: 15px; }
+  .card .grade { float: right; padding: 1px 8px; border-radius: 4px;
+                 font-size: 12px; font-weight: 700; }
+  .grade.A { background: var(--green); color: #03170a; }
+  .grade.B { background: var(--accent); color: #04121f; }
+  .grade.C { background: var(--amber); color: #1d1600; }
+  .grade.D, .grade.F { background: var(--red); color: #1d0000; }
+  .card .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .tl { font-size: 12px; }
+  .tl .k { color: var(--accent); }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 4px;
+           background: var(--panel); border: 1px solid var(--border);
+           font-size: 11px; color: var(--muted); }
+  .quality { font-size: 11px; color: var(--amber); }
+  input, select { background: var(--panel); color: var(--text);
+                  border: 1px solid var(--border); border-radius: 6px;
+                  padding: 7px 10px; font: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>trade-monitor</h1>
+  <span class="ver" id="ver"></span>
+  <span class="spacer"></span>
+  <input id="scan-syms" placeholder="symbols (blank = universe)" size="22">
+  <select id="scan-market"><option>IN</option><option>US</option></select>
+  <button id="scan-btn">Run scan</button>
+</header>
+
+<div class="layout">
+  <div class="left">
+    <h2>Theses <span class="badge" id="thesis-count">0</span></h2>
+    <div class="cards" id="theses"></div>
+    <div class="empty" id="theses-empty">
+      No theses yet. Run a scan, or seed data first:<br><br>
+      <code>trade-monitor seed --limit 50</code><br>
+      <code>trade-monitor scan --strategy canslim</code>
+    </div>
+
+    <h2 style="margin-top:28px">Recent runs</h2>
+    <table id="runs"><tbody></tbody></table>
+
+    <h2 style="margin-top:28px">Data coverage</h2>
+    <table id="coverage"><tbody></tbody></table>
+  </div>
+
+  <div class="right">
+    <h2>Audit trail <span class="badge" id="ledger-count">0</span></h2>
+    <div id="ledger" class="tl"></div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
+  c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+async function loadHealth() {
+  const h = await api("/api/health");
+  $("#ver").textContent = "v" + h.version;
+  const cov = h.market_coverage || {};
+  $("#coverage tbody").innerHTML = `
+    <tr><th>symbols</th><td>${cov.symbols ?? 0}</td></tr>
+    <tr><th>bars</th><td>${(cov.rows ?? 0).toLocaleString()}</td></tr>
+    <tr><th>from</th><td>${esc(cov.from ?? "—")}</td></tr>
+    <tr><th>to</th><td>${esc(cov.to ?? "—")}</td></tr>
+    <tr><th>db</th><td style="color:var(--muted)">${esc(cov.path ?? "—")}</td></tr>`;
+}
+
+async function loadTheses() {
+  const { theses } = await api("/api/theses?limit=60");
+  $("#thesis-count").textContent = theses.length;
+  $("#theses-empty").style.display = theses.length ? "none" : "block";
+  $("#theses").innerHTML = theses.map(t => {
+    const g = esc(t.grade || "?");
+    const conf = t.confidence != null ? `${Math.round(t.confidence * (t.confidence <= 1 ? 100 : 1))}%` : "—";
+    const pat = (t.patterns || []).join(", ") || "—";
+    const q = (t.degraded && t.degraded.length)
+      ? `<div class="quality">⚠ data: ${esc(t.degraded.join(", "))}</div>` : "";
+    return `<div class="card" onclick="showThesis('${esc(t.thesis_id)}')">
+      <span class="grade ${g}">${g}</span>
+      <div class="sym">${esc(t.symbol)}</div>
+      <div class="meta">grade ${g} · conf ${conf}</div>
+      <div class="meta">${esc(pat)}</div>${q}</div>`;
+  }).join("");
+}
+
+async function loadRuns() {
+  const runs = await api("/api/runs?limit=10");
+  $("#runs tbody").innerHTML = runs.length ? runs.map(r => `
+    <tr><td>${esc(r.strategy || "")}</td><td>${esc(r.market || "")}</td>
+    <td>${r.symbols ?? ""}</td><td>${r.hits ?? ""}</td>
+    <td style="color:var(--muted)">${esc(r.started_at || r.created_at || "")}</td></tr>`
+  ).join("") : `<tr><td style="color:var(--muted)">none</td></tr>`;
+}
+
+async function loadLedger() {
+  const { events, count } = await api("/api/ledger?limit=60");
+  $("#ledger-count").textContent = count;
+  $("#ledger").innerHTML = events.length ? events.map(e => `
+    <div style="padding:3px 0;border-bottom:1px solid var(--border)">
+      <span class="k">${esc(e.kind)}</span>
+      <span style="color:var(--muted)"> ${esc(e.summary)}</span></div>`
+  ).join("") : `<div style="color:var(--muted)">no events yet</div>`;
+}
+
+async function showThesis(id) {
+  const r = await api("/api/thesis/" + encodeURIComponent(id));
+  const t = r.thesis || {};
+  const tl = (r.timeline || []).map(e =>
+    `<div style="padding:3px 0"><span class="k">${esc(e.kind)}</span>
+     <span style="color:var(--muted)"> ${esc(e.summary)}</span></div>`).join("");
+  $("#ledger").previousElementSibling?.lastChild;
+  document.querySelector(".right h2").innerHTML =
+    `Thesis <span class="badge">${esc(t.symbol || id)}</span>`;
+  $("#ledger").innerHTML =
+    `<div style="margin-bottom:10px"><b>${esc(t.symbol || "")}</b> ·
+      grade ${esc(t.grade || "?")}</div>` +
+    (tl || `<div style="color:var(--muted)">no ledger events linked</div>`);
+}
+
+async function runScan() {
+  const btn = $("#scan-btn");
+  btn.disabled = true; btn.textContent = "Scanning…";
+  const body = {
+    market: $("#scan-market").value,
+    symbols: $("#scan-syms").value.trim() || null,
+    limit: 25,
+  };
+  try {
+    await api("/api/scan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setTimeout(refresh, 1500);
+  } catch (e) { alert("scan failed: " + e.message); }
+  finally { btn.disabled = false; btn.textContent = "Run scan"; }
+}
+
+function refresh() {
+  loadHealth().catch(() => {});
+  loadTheses().catch(() => {});
+  loadRuns().catch(() => {});
+  loadLedger().catch(() => {});
+}
+
+$("#scan-btn").addEventListener("click", runScan);
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

@@ -23,7 +23,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from ..contracts import (
+from trade_monitor_contracts import (
     Evidence,
     Fundamentals,
     Grade,

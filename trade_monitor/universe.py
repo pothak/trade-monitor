@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Sequence
 
-from .contracts import Fundamentals, PriceSeries
+from trade_monitor_contracts import Fundamentals, PriceSeries
 
 # Benchmark for relative strength / market direction.
 INDEX: dict[str, str] = {"IN": "^NSEI", "US": "^GSPC"}

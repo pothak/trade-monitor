@@ -36,7 +36,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
-from .contracts import (
+from trade_monitor_contracts import (
     Fundamentals,
     PriceSeries,
     Thesis,
@@ -167,13 +167,31 @@ def run_strategy(
     run_id: int | None = None,
     validators: Sequence[Any] = (),
     bench_series: PriceSeries | None = None,
+    ledger: Any | None = None,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> ScanReport:
     """Run one strategy across one universe.
 
     This is the single entry point the CLI, the web UI and the scheduler all
     call, so a scan behaves identically everywhere.
+
+    If `ledger` is given, every stage writes an audit event (Principle P4):
+    scan start, per-symbol detect hit/miss, score computed, thesis created.
+    The ledger write must never break a scan, so failures there are swallowed.
     """
+    def _led(kind: str, *, subject: str, summary: str,
+             thesis_id: str | None = None,
+             payload: Mapping[str, Any] | None = None) -> None:
+        if ledger is None:
+            return
+        try:
+            ledger.write(
+                kind, subject=subject, summary=summary,
+                run_id=run_id, thesis_id=thesis_id, payload=dict(payload or {}),
+            )
+        except Exception:  # noqa: BLE001 - audit must never break a scan
+            pass
+
     strategy = STRATEGIES.create(strategy_name)
     opts = dict(strategy_options or {})
     report = ScanReport(strategy=strategy_name, market=market)
@@ -200,6 +218,11 @@ def run_strategy(
     report.scanned = len(price_map)
 
     # --- step 2 + 3: detect, then decide whether to spend ----------------
+    # A strategy that declares no pattern requirement (requires = ()) is not
+    # gated by detection: it scores every name. The cheap-filter-first ordering
+    # still holds, because such a strategy's own scoring is price-only by
+    # construction (needs_fundamentals is independent of requires).
+    requires_patterns = bool(getattr(strategy, "requires", ()))
     pending: list[tuple[str, PriceSeries, dict[str, dict[str, Any]]]] = []
     for sym, series in price_map.items():
         as_of = series.last.date if series.last else ""
@@ -209,8 +232,13 @@ def run_strategy(
             report.errors += 1
             fired = {}
 
-        if not fired:
+        if requires_patterns and not fired:
             report.misses += 1
+            _led(
+                "detect.miss", subject=sym,
+                summary=f"{sym} {as_of}: no pattern",
+                payload={"as_of": as_of, "strategy": strategy_name},
+            )
             report.observations.append(
                 {
                     "symbol": sym, "market": series.market, "as_of": as_of,
@@ -226,6 +254,12 @@ def run_strategy(
                     pattern_strength=None, evidence=[], detail={"reason": "no pattern"},
                 )
             continue
+        if fired:
+            _led(
+                "detect.hit", subject=sym,
+                summary=f"{sym} {as_of}: {','.join(fired)}",
+                payload={"as_of": as_of, "patterns": list(fired)},
+            )
         pending.append((sym, series, fired))
 
     # --- step 4: fundamentals ONLY for survivors ------------------------
@@ -261,6 +295,19 @@ def run_strategy(
             continue
 
         report.theses.append(thesis)
+
+        _led(
+            "score.computed", subject=sym, thesis_id=thesis.id,
+            summary=f"{sym} {thesis.as_of}: grade={thesis.grade} "
+                    f"confidence={thesis.confidence}",
+            payload={"as_of": thesis.as_of, "grade": thesis.grade,
+                     "confidence": thesis.confidence, "patterns": list(fired)},
+        )
+        _led(
+            "thesis.created", subject=sym, thesis_id=thesis.id,
+            summary=f"{sym} {thesis.as_of}: thesis ready ({thesis.grade})",
+            payload={"as_of": thesis.as_of, "grade": thesis.grade},
+        )
 
         primary = None
         if thesis.pattern and thesis.pattern in fired:

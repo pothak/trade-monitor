@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
-from ..contracts import Evidence, Fundamentals, Grade, Market, PriceSeries
+from trade_monitor_contracts import Evidence, Fundamentals, Grade, Market, PriceSeries
 
 
 @dataclass

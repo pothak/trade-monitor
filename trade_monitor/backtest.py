@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Callable, Sequence
 
-from .contracts import Fundamentals, PriceSeries
+from trade_monitor_contracts import Fundamentals, PriceSeries
 from .patterns.cup_handle import CupWithHandle
 
 

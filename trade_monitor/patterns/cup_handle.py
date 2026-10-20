@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..contracts import PriceSeries
+from trade_monitor_contracts import PriceSeries
 
 
 def _pct_drop(a: float, b: float) -> float:

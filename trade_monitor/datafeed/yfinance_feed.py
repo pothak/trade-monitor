@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from ..contracts import Bar, Fundamentals, Market, PriceSeries, QuarterEPS
+from trade_monitor_contracts import Bar, Fundamentals, Market, PriceSeries, QuarterEPS
 from ..registry import Registry
 
 MARKETS: dict[str, str] = {"IN": "^NSEI", "US": "^GSPC"}

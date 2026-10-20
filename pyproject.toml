@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trade-monitor"
+version = "0.1.0"
+description = "Self-hosted trade monitor: run your own strategies over market data with a verifiable audit trail."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "pothak and trade-monitor contributors" }]
+keywords = ["trading", "strategy", "backtest", "canslim", "open-source", "self-hosted"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+]
+
+# The engine core is stdlib-only. These are the edge dependencies (datafeeds,
+# universe fetching). See spec/DEPENDENCIES.md D3.
+dependencies = [
+    "trade-monitor-contracts>=0.1.0",
+    "yfinance>=0.2",
+    "pandas>=2.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+render = ["matplotlib>=3.7"]
+nse = ["beautifulsoup4>=4.12", "exchange-calendars>=4.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+trade-monitor = "trade_monitor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/pothak/trade-monitor"
+Repository = "https://github.com/pothak/trade-monitor"
+Issues = "https://github.com/pothak/trade-monitor/issues"
+
+[tool.setuptools]
+packages = [
+    "trade_monitor",
+    "trade_monitor.datafeed",
+    "trade_monitor.patterns",
+    "trade_monitor.strategy",
+    "trade_monitor.store",
+    "trade_monitor.validate",
+    "trade_monitor.delivery",
+    "trade_monitor.render",
+    "trade_monitor.server",
+]
+
+[tool.setuptools.package-data]
+"trade_monitor.server" = ["static/**/*"]

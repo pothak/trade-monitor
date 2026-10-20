@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from canslim.contracts import (
+from trade_monitor_contracts import (
     Evidence,
     Fundamentals,
     Grade,

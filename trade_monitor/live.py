@@ -34,7 +34,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
-from .contracts import PriceSeries, Bar
+from trade_monitor_contracts import PriceSeries, Bar
 from .engine import DEFAULT_LOOKBACK, detect_patterns, run_strategy, validate_thesis
 from .stream import RollingWindow, StreamEvent, StreamHub
 
@@ -107,9 +107,31 @@ class LiveEngine:
 
         self._m_day: str | None = None
         self._bench_series: PriceSeries | None = None
+        self._strategy_obj: Any | None = None
         self.reports: list[LiveReport] = []
         self.closed = 0
         self.decided = 0
+
+    def _strategy(self) -> Any:
+        """The strategy instance, created once and reused.
+
+        Cached so every bar close scores with identical configuration, and so
+        the pattern requirement is read from the strategy rather than guessed.
+        """
+        if self._strategy_obj is None:
+            from .strategy import REGISTRY as STRATEGIES
+
+            self._strategy_obj = STRATEGIES.create(self.strategy)
+        return self._strategy_obj
+
+    def _requires(self) -> tuple[str, ...]:
+        """The strategy's declared pattern requirements.
+
+        The batch engine gates on `strategy.requires`; live uses the same list
+        or the two paths diverge (Principle P2). A strategy that declares no
+        patterns is not gated, so it scores every name.
+        """
+        return tuple(getattr(self._strategy(), "requires", ()) or ())
 
     # -- market direction (M): once per day, shared ----------------------
 
@@ -170,8 +192,10 @@ class LiveEngine:
                 bars=bars,
             )
 
-            patterns = detect_patterns(series, self.pattern_options)
-            report.patterns = [p.name for p in patterns]
+            patterns = detect_patterns(
+                series, self._requires(), pattern_options=self.pattern_options
+            )
+            report.patterns = list(patterns)
 
             self._event(
                 "detect.hit" if patterns else "detect.miss",
@@ -181,7 +205,7 @@ class LiveEngine:
                 payload={"day": day, "patterns": report.patterns},
             )
 
-            if not patterns:
+            if self._requires() and not patterns:
                 report.skipped = "no pattern"
                 self.reports.append(report)
                 return report
@@ -227,13 +251,10 @@ class LiveEngine:
     def _score(self, series: PriceSeries, patterns: Sequence[Any]) -> dict[str, Any]:
         """Run the strategy for one symbol.
 
-        Uses the same STRATEGIES registry the batch path uses, so a runtime
-        injected strategy behaves identically here.
+        Uses the same STRATEGIES registry and the same strategy instance the
+        batch path uses, so a runtime injected strategy behaves identically.
         """
-        from .strategy import REGISTRY as STRATEGIES
-
-        strat = STRATEGIES.create(self.strategy)
-        entry = STRATEGIES.get(self.strategy)
+        strat = self._strategy()
         fundamentals = None
         if getattr(strat, "needs_fundamentals", False) and self.feed is not None:
             try:
@@ -270,11 +291,19 @@ class LiveEngine:
             return None, None
         if isinstance(result, str):
             return result, None
-        if isinstance(result, tuple) and len(result) >= 2:
-            return result[0], float(result[1])
+        if isinstance(result, tuple):
+            # The contract is score() -> (evidence, grade, confidence).
+            # Also accept (grade, score) for simpler strategies.
+            if len(result) >= 3:
+                return result[1], _as_float(result[2])
+            if len(result) == 2:
+                first, second = result
+                if isinstance(first, str):
+                    return first, _as_float(second)
+                return second, None
         grade = getattr(result, "grade", None)
-        score = getattr(result, "score", None)
-        return grade, float(score) if score is not None else None
+        score = getattr(result, "score", None) or getattr(result, "confidence", None)
+        return grade, _as_float(score)
 
     # -- helpers ---------------------------------------------------------
 
@@ -326,6 +355,13 @@ def attach(hub: StreamHub, live: LiveEngine) -> LiveEngine:
     """Connect a live engine to a hub. Convenience so callers write one line."""
     hub.on_bar_close(live.on_bar_close)
     return live
+
+
+def _as_float(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 
 __all__ = ["LiveEngine", "LiveReport", "attach"]

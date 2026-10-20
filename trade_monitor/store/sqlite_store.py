@@ -28,7 +28,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
-from ..contracts import Thesis
+from trade_monitor_contracts import Thesis
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
