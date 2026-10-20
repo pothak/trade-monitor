@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from trade_monitor_contracts import Bar, Fundamentals, Market, PriceSeries, QuarterEPS
+
 from ..registry import Registry
 
 MARKETS: dict[str, str] = {"IN": "^NSEI", "US": "^GSPC"}
@@ -29,11 +30,16 @@ _INDEX_OVERRIDE: dict[str, str] = {
 class YFinanceFeed:
     name = "yfinance"
 
-    def __init__(self, *, cache_ttl_seconds: int = 900, retries: int = 3) -> None:
+    def __init__(self, *, cache_ttl_seconds: int = 900, retries: int = 3,
+                 disk_cache: Any | None = None) -> None:
         self._cache_ttl = cache_ttl_seconds
         self._retries = retries
         self._price_cache: dict[tuple[str, int], tuple[float, PriceSeries]] = {}
         self._fund_cache: dict[str, tuple[float, Fundamentals]] = {}
+        # A disk cache survives process restarts, so a second scan of the same
+        # universe does not re-hit the network (DATA-8). Opt-in: pass a
+        # DiskCache to enable it, or leave None for pure in-memory behaviour.
+        self._disk = disk_cache
 
     # -- helpers ---------------------------------------------------------
 
@@ -73,6 +79,24 @@ class YFinanceFeed:
         if hit:
             return hit
 
+        if self._disk is not None:
+            from .cache import cached_call, series_from_json, series_to_json
+
+            def produce() -> PriceSeries:
+                return self._fetch_price_series(symbol, days)
+
+            series = cached_call(
+                self._disk, f"yf:price:{symbol}:{days}", self._cache_ttl, produce,
+                to_json=series_to_json, from_json=series_from_json,
+            )
+            self._store(self._price_cache, key, series)
+            return series
+
+        series = self._fetch_price_series(symbol, days)
+        self._store(self._price_cache, key, series)
+        return series
+
+    def _fetch_price_series(self, symbol: str, days: int) -> PriceSeries:
         # yfinance day counts are calendar-ish; oversample so we retain enough
         # sessions after holidays/suspensions.
         span = max(int(days * 1.6), 60)
@@ -105,14 +129,12 @@ class YFinanceFeed:
         if not bars:
             raise LookupError(f"yfinance: all bars NaN for {symbol}")
 
-        series = PriceSeries(
+        return PriceSeries(
             symbol=symbol,
             market=self.market_of(symbol),
             currency=self.currency_of(symbol),
             bars=bars[-days:],
         )
-        self._store(self._price_cache, key, series)
-        return series
 
     # -- fundamentals ----------------------------------------------------
 
@@ -121,6 +143,26 @@ class YFinanceFeed:
         if hit:
             return hit
 
+        if self._disk is not None:
+            from .cache import (
+                cached_call,
+                fundamentals_from_json,
+                fundamentals_to_json,
+            )
+
+            fund = cached_call(
+                self._disk, f"yf:fund:{symbol}", self._cache_ttl,
+                lambda: self._fetch_fundamentals(symbol),
+                to_json=fundamentals_to_json, from_json=fundamentals_from_json,
+            )
+            self._store(self._fund_cache, symbol, fund)
+            return fund
+
+        fund = self._fetch_fundamentals(symbol)
+        self._store(self._fund_cache, symbol, fund)
+        return fund
+
+    def _fetch_fundamentals(self, symbol: str) -> Fundamentals:
         degraded: list[str] = []
         ticker = self._ticker(symbol)
         market = self.market_of(symbol)
@@ -176,7 +218,6 @@ class YFinanceFeed:
             institutional_detail=inst_detail,
             degraded=degraded,
         )
-        self._store(self._fund_cache, symbol, fund)
         return fund
 
     @staticmethod
@@ -221,11 +262,11 @@ class YFinanceFeed:
         return out
 
 
-REGISTRY: Registry[YFinanceFeed] = Registry()
+REGISTRY = Registry()
 REGISTRY.kind = "datafeed"
 REGISTRY.register(
     "yfinance",
-    YFinanceFeed,
+    lambda **kw: YFinanceFeed(disk_cache=_default_disk_cache(), **kw),
     description="Yahoo Finance via yfinance. Free, no key. IN+US. "
     "No institutional holder data for India.",
     version="0.1.0",
@@ -235,3 +276,17 @@ REGISTRY.register(
         "retries": {"type": "integer", "default": 3},
     },
 )
+
+
+def _default_disk_cache():
+    """A disk cache unless explicitly disabled, so scans are not re-fetching."""
+    import os
+
+    if os.environ.get("TRADE_MONITOR_NO_DISK_CACHE") == "1":
+        return None
+    try:
+        from .cache import DiskCache
+
+        return DiskCache()
+    except Exception:  # noqa: BLE001
+        return None

@@ -20,8 +20,9 @@ adjusted, so a name scored on thin data cannot present as high-conviction.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from trade_monitor_contracts import (
     Evidence,
@@ -31,6 +32,7 @@ from trade_monitor_contracts import (
     PriceSeries,
     Thesis,
 )
+
 from .canslim import LETTERS, ScoreContext
 
 DEFAULT_WEIGHTS: dict[str, float] = {

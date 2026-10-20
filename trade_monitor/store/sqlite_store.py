@@ -24,9 +24,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any
 
 from trade_monitor_contracts import Thesis
 
@@ -120,6 +121,9 @@ class Store:
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA)
+        from .migrations import migrate
+
+        migrate(self._conn)
         self._conn.commit()
 
     def close(self) -> None:

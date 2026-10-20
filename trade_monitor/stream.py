@@ -39,10 +39,10 @@ So the window is defensive by construction:
 
 from __future__ import annotations
 
-import time
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Iterable, Mapping
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ class Indicator:
     """
 
     name: str
-    update: Callable[["RollingWindow", StreamEvent], float | None]
+    update: Callable[[RollingWindow, StreamEvent], float | None]
     value: float | None = None
     error: str | None = None
 
@@ -106,7 +106,7 @@ class RollingWindow:
         self.symbol = symbol
         self.capacity = capacity
         self.min_bars_for_close = min_bars_for_close
-        self._events: Deque[StreamEvent] = deque(maxlen=capacity)
+        self._events: deque[StreamEvent] = deque(maxlen=capacity)
         self._seen_ts: set[str] = set()
         self._seen_day: set[str] = set()
         self.indicators: dict[str, Indicator] = {i.name: i for i in indicators}

@@ -28,10 +28,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-from typing import Any, Callable, Sequence
+from typing import Any
 
 from trade_monitor_contracts import Fundamentals, PriceSeries
+
 from .patterns.cup_handle import CupWithHandle
 
 
@@ -87,21 +87,47 @@ class BacktestResult:
         base = [o for o in self.baseline_outcomes if o.return_pct is not None]
         base_avg = sum(o.return_pct or 0 for o in base) / len(base) if base else None
 
+        mfe = [o.max_favorable_pct for o in sig if o.max_favorable_pct is not None]
+        mae = [o.max_adverse_pct for o in sig if o.max_adverse_pct is not None]
+
+        pivot_rate = round(len(pivot_hits) / n, 4) if n else None
+        target_rate = round(len(target_hits) / n, 4) if n else None
+        edge = round(avg - base_avg, 3) if (avg is not None and base_avg is not None) else None
+
         return {
             "symbol": self.symbol,
             "windows_tested": self.windows_tested,
             "signals": n,
-            "pivot_hit_rate": round(len(pivot_hits) / n, 4) if n else None,
-            "target_hit_rate": round(len(target_hits) / n, 4) if n else None,
+            # Primary metric. A breakout signal is judged first on whether the
+            # pivot was actually cleared -- that is the event the strategy
+            # predicts. The measured move is a ceiling, reached far less often.
+            "pivot_hit_rate": pivot_rate,
+            "target_hit_rate": target_rate,
             "stop_rate": round(len(stop_hits) / n, 4) if n else None,
             "win_rate": round(len(wins) / n, 4) if n else None,
             "avg_return_pct": round(avg, 3) if avg is not None else None,
+            "avg_mfe_pct": round(sum(mfe) / len(mfe), 3) if mfe else None,
+            "avg_mae_pct": round(sum(mae) / len(mae), 3) if mae else None,
             "baseline_avg_return_pct": round(base_avg, 3) if base_avg is not None else None,
-            "edge_vs_baseline": (
-                round(avg - base_avg, 3) if (avg is not None and base_avg is not None) else None
-            ),
+            "edge_vs_baseline": edge,
+            "verdict": self._verdict(n, pivot_rate, edge),
             "notes": self.notes,
         }
+
+    def _verdict(self, n: int, pivot_rate: float | None, edge: float | None) -> str:
+        """A plain-language read, because a number without a decision is not a result."""
+        if n < 5:
+            return "inconclusive: too few signals to judge"
+        if pivot_rate is None:
+            return "inconclusive: no measurable outcomes"
+        beats = edge is not None and edge > 0
+        if pivot_rate >= 0.5 and beats:
+            return "promising: pivot cleared in most cases and ahead of baseline"
+        if pivot_rate >= 0.5 and not beats:
+            return "weak: breakouts happen but no edge over baseline drift"
+        if pivot_rate < 0.3:
+            return "poor: breakouts rarely trigger; detector likely too loose or mistimed"
+        return "mixed: breakouts sometimes trigger; retune before trusting"
 
 
 def truncate(series: PriceSeries, as_of: str) -> PriceSeries | None:

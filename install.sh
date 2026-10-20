@@ -135,7 +135,21 @@ print("  engine core imports cleanly (stdlib only)")
 PYEOF
 ok "imports and registry verified"
 
-# ---- 6. optional seed ------------------------------------------------------
+# ---- 6. correctness tests --------------------------------------------------
+if [ "${SKIP_TESTS:-0}" = "1" ]; then
+  warn "skipping tests (SKIP_TESTS=1)"
+elif python -c "import pytest" 2>/dev/null; then
+  info "running the correctness test suite"
+  if python -m pytest -q tests/ 2>&1 | tail -1 | grep -q "passed"; then
+    ok "tests passed"
+  else
+    warn "some tests failed. Run: .venv/bin/python -m pytest tests/ -q"
+  fi
+else
+  warn "pytest not installed; skipping tests. Run: .venv/bin/pip install -e '.[dev]'"
+fi
+
+# ---- 7. optional seed ------------------------------------------------------
 if [ -n "$SEED" ]; then
   info "seeding market data (SEED=$SEED)"
   trade-monitor seed --limit "$SEED" || warn "seed had failures (free data is imperfect; that is normal)"
@@ -144,7 +158,7 @@ else
   warn "skipped data seed. Run:  SEED=50 ./install.sh   or   trade-monitor seed --limit 50"
 fi
 
-# ---- 7. done ---------------------------------------------------------------
+# ---- 8. done ---------------------------------------------------------------
 echo
 printf '%s%s trade-monitor is installed %s\n' "$BOLD" "$GREEN" "$RESET"
 echo

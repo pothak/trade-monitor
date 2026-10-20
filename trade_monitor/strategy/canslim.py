@@ -22,10 +22,11 @@ Honest limits, stated rather than papered over:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Any
 
-from trade_monitor_contracts import Evidence, Fundamentals, Grade, Market, PriceSeries
+from trade_monitor_contracts import Evidence, Fundamentals, Market, PriceSeries
 
 
 @dataclass
@@ -263,7 +264,7 @@ def score_n(ctx: ScoreContext) -> Evidence:
 
 def score_s(ctx: ScoreContext) -> Evidence:
     dryup = ctx.opt("s_max_dryup_ratio", 0.80)
-    breakout_mult = ctx.opt("s_breakout_volume_mult", 1.4)
+    ctx.opt("s_breakout_volume_mult", 1.4)
     bars = ctx.series.bars
     if len(bars) < 40:
         return Evidence("S", "Supply and demand", None, dryup, "unknown",
@@ -386,7 +387,7 @@ def score_m(ctx: ScoreContext) -> Evidence:
     if passed:
         rationale = f"benchmark {last:.0f} above {ma_days}d MA {ma:.0f}, MA rising"
     elif above:
-        rationale = f"above MA but 20d MA not rising"
+        rationale = "above MA but 20d MA not rising"
     else:
         rationale = f"benchmark {last:.0f} below {ma_days}d MA {ma:.0f}"
 

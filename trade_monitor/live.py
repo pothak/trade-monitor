@@ -30,13 +30,14 @@ they could disagree whenever the index ticked between two closes.
 
 from __future__ import annotations
 
-import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
-from trade_monitor_contracts import PriceSeries, Bar
-from .engine import DEFAULT_LOOKBACK, detect_patterns, run_strategy, validate_thesis
-from .stream import RollingWindow, StreamEvent, StreamHub
+from trade_monitor_contracts import Bar, PriceSeries
+
+from .engine import DEFAULT_LOOKBACK, detect_patterns
+from .stream import RollingWindow, StreamHub
 
 
 @dataclass

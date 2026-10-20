@@ -161,3 +161,128 @@ The same seam applies to the other plugin kinds. A `DataFeed` implements
 `price_series`, `fundamentals`, `index_for`. A `PatternDetector` declares
 `provides` (e.g. `pivot_price`, `stop_reference`) and returns a dict of measured
 values. Both are registered the same way.
+
+---
+
+## The plugin console
+
+The engine's value is "bring your own component". The console is how you see
+and manage everything you have brought, across **all five plugin kinds**:
+
+| Kind | Protocol | Directory | Declarative form |
+|---|---|---|---|
+| strategy | `Strategy` | `strategies/` | `.py` (needs code) |
+| feed | `DataFeed` | `feeds/` | `.toml` (no code) |
+| pattern | `PatternDetector` | `patterns/` | `.py` |
+| validator | `Validator` | `validators/` | `.py` |
+| deliverer | `DeliveryAdapter` | `deliverers/` | `.py` |
+
+### Two ways to define a plugin
+
+**1. Code (any kind).** Drop a `.py` in the kind's directory, as today. Full
+power, authored in your own editor. The console lists and toggles it but does
+not edit source — authoring stays in the editor (low-friction philosophy).
+
+**2. Declarative spec (feeds, and later patterns).** A `.toml` file with no
+code, interpreted by a generic driver. This is how "create a new feed source"
+works without uploading executable code:
+
+```toml
+# ~/.trade-monitor/feeds/mydata.toml
+[feed]
+name        = "mydata"
+kind        = "rest"          # the generic driver to use
+description = "My broker's REST quote endpoint"
+enabled     = true
+
+[feed.http]
+url         = "https://api.example.com/quote/{symbol}"
+method      = "GET"
+# api_key read from the environment, never stored in the file
+auth_header = "Authorization"
+auth_env    = "MYDATA_TOKEN"
+timeout     = 10
+
+[feed.map]                    # json path -> Bar / PriceSeries field
+symbol      = "$.ticker"
+bars        = "$.candles"
+date        = "t"             # relative to each item in `bars`
+open        = "o"
+high        = "h"
+low         = "l"
+close       = "c"
+volume      = "v"
+
+[feed.markets]
+IN = "^NSEI"
+US = "^GSPC"
+```
+
+The generic driver (`GENERIC_FEED` registry kind, `"rest"`) executes this:
+fetch, map, build `PriceSeries`. No `exec`, no arbitrary code. Secrets come
+from the environment, named by `auth_env`, so credentials never live in a file
+the console can read back.
+
+### The manifest console
+
+The console never executes a plugin to describe it. It reads:
+
+- **code plugins** — a static scan for `name` / `requires` / `needs_fundamentals`,
+  plus an import under fault isolation to confirm it loads
+- **spec plugins** — the TOML file directly
+
+and produces a uniform **manifest**:
+
+```json
+{
+  "name": "mydata", "kind": "feed", "origin": "spec",
+  "version": "0.1.0", "enabled": true, "status": "ok",
+  "description": "My broker's REST quote endpoint",
+  "params": {"url": "https://api.example.com/quote/{symbol}"},
+  "config_schema": {}
+}
+```
+
+`status` is one of `ok`, `error`, `disabled`. A plugin that fails to load shows
+`error` with the reason — it never disappears silently.
+
+### API
+
+```
+GET    /api/plugins                     all kinds, uniform manifests
+GET    /api/plugins?kind=feed           filtered
+GET    /api/plugins/<kind>/<name>       one manifest + source location
+POST   /api/plugins                     create (spec kinds) or register (code)
+PUT    /api/plugins/<kind>/<name>       update params / description
+DELETE /api/plugins/<kind>/<name>       remove the file (code + spec)
+POST   /api/plugins/<kind>/<name>/toggle   enable / disable
+POST   /api/plugins/validate            syntax-check without loading
+```
+
+Creating a **code** plugin writes a minimal, valid starter file into the kind's
+directory — a template the user then edits in their editor. Creating a **spec**
+plugin writes the `.toml` from the submitted values. Neither path runs user
+code from the console.
+
+### Enable / disable
+
+A disabled plugin is **skipped at load time** and recorded as `status=disabled`.
+The engine and CLI select from enabled plugins only. Disabling is reversible and
+never deletes the file.
+
+### Discovery order (all kinds)
+
+```
+<kind-dir>/                          project-local
+~/.trade-monitor/<kind-dir>/         per-user
+~/.config/trade-monitor/<kind-dir>/  XDG
+```
+
+Later directories shadow earlier ones by name, as with strategies. Shadowing is
+logged so it is never a silent surprise.
+
+### Fault isolation still holds (P6)
+
+A broken plugin — bad TOML, a syntax error, a class that fails to instantiate —
+is recorded as `status=error` with its reason and skipped. The console shows it;
+the monitor keeps running.

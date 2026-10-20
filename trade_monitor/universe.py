@@ -24,15 +24,15 @@ import concurrent.futures as cf
 import random
 import threading
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Sequence
 
 from trade_monitor_contracts import Fundamentals, PriceSeries
 
 # Benchmark for relative strength / market direction.
 INDEX: dict[str, str] = {"IN": "^NSEI", "US": "^GSPC"}
 
-NSE_LIST_URL = "https://archives.nsiindia.com/content/indices/ind_nifty50list.csv"
+NSE_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
 SP500_LIST_URL = (
     "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/"
     "data/constituents.csv"
@@ -51,7 +51,7 @@ class Universe:
     def __len__(self) -> int:
         return len(self.symbols)
 
-    def filter(self, limit: int | None = None) -> "Universe":
+    def filter(self, limit: int | None = None) -> Universe:
         if limit is None:
             return self
         return Universe(
@@ -165,8 +165,9 @@ def read_symbols(path: str, market: str = "IN") -> Universe:
 
 
 def _suffix(symbol: str, market: str) -> str:
+    """Only IN and US are supported. IN names get the NSE `.NS` suffix."""
     s = symbol.strip().upper()
-    if s.endswith((".NS", ".BO", ".T", ".HK", ".KS", ".TWO")):
+    if s.endswith((".NS", ".BO")):
         return s
     if market == "IN":
         return f"{s}.NS"
@@ -252,7 +253,7 @@ def scan_prices(
             limiter.wait()
         try:
             return sym, fetch(sym)
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return sym, None
 
     with cf.ThreadPoolExecutor(max_workers=max(1, workers)) as pool:

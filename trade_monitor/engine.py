@@ -33,8 +33,9 @@ Guarantees:
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 from trade_monitor_contracts import (
     Fundamentals,
@@ -42,8 +43,10 @@ from trade_monitor_contracts import (
     Thesis,
     ValidationResult,
 )
+
 from .patterns import REGISTRY as PATTERNS
 from .strategy import REGISTRY as STRATEGIES
+from .timing import Stages
 from .universe import RateLimiter, scan_fundamentals, scan_prices
 
 # Default lookback: enough for a 65-bar cup plus a 250-bar high window.
@@ -63,6 +66,7 @@ class ScanReport:
     elapsed_s: float = 0.0
     observations: list[dict[str, Any]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    stages: dict[str, Any] = field(default_factory=dict)
 
     @property
     def hits(self) -> int:
@@ -85,6 +89,7 @@ class ScanReport:
             "elapsed_s": round(self.elapsed_s, 2),
             "per_symbol_ms": round(self.elapsed_s / self.scanned * 1000, 1) if self.scanned else None,
             "notes": self.notes,
+            "stages": self.stages,
         }
 
 
@@ -165,6 +170,7 @@ def run_strategy(
     strategy_options: Mapping[str, Any] | None = None,
     store: Any | None = None,
     run_id: int | None = None,
+    market_store: Any | None = None,
     validators: Sequence[Any] = (),
     bench_series: PriceSeries | None = None,
     ledger: Any | None = None,
@@ -195,6 +201,7 @@ def run_strategy(
     strategy = STRATEGIES.create(strategy_name)
     opts = dict(strategy_options or {})
     report = ScanReport(strategy=strategy_name, market=market)
+    stages = Stages()
     started = time.perf_counter()
 
     if bench_series is None:
@@ -207,15 +214,26 @@ def run_strategy(
 
     # --- step 1: prices (whole universe) --------------------------------
     def fetch(sym: str) -> PriceSeries:
-        return feed.price_series(sym, lookback)
+        series = feed.price_series(sym, lookback)
+        if market_store is not None:
+            try:
+                market_store.log_fetch(sym, "bars", rows=len(series.bars), source="feed")
+            except Exception:  # noqa: BLE001 - freshness logging is best-effort
+                pass
+        return series
 
     def on_err(sym: str, exc: Exception) -> None:
         report.errors += 1
+
+    _stage_t0 = time.perf_counter()
 
     price_map = scan_prices(
         symbols, fetch, workers=workers, limiter=limiter, on_error=on_err
     )
     report.scanned = len(price_map)
+    # The whole price sweep is one stage. Per-call detail is available from the
+    # individual fetches if a feed reports it; here we only need the total.
+    stages.add("fetch", time.perf_counter() - _stage_t0, count=len(price_map))
 
     # --- step 2 + 3: detect, then decide whether to spend ----------------
     # A strategy that declares no pattern requirement (requires = ()) is not
@@ -226,11 +244,13 @@ def run_strategy(
     pending: list[tuple[str, PriceSeries, dict[str, dict[str, Any]]]] = []
     for sym, series in price_map.items():
         as_of = series.last.date if series.last else ""
+        _det_t0 = time.perf_counter()
         try:
             fired = detect_patterns(series, strategy.requires, pattern_options=pattern_options)
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             report.errors += 1
             fired = {}
+        stages.add("detect", time.perf_counter() - _det_t0)
 
         if requires_patterns and not fired:
             report.misses += 1
@@ -262,19 +282,35 @@ def run_strategy(
             )
         pending.append((sym, series, fired))
 
-    # --- step 4: fundamentals ONLY for survivors ------------------------
+    # --- step 4: fundamentals for survivors -----------------------------
+    # Always fetch for survivors: even a price-only strategy needs size for
+    # the tier label, and the disk cache makes this cheap. The strategy only
+    # *receives* fundamentals when it declares it needs them (the None below),
+    # so gating semantics are unchanged.
     survivors = [sym for sym, _, _ in pending]
-    if strategy.needs_fundamentals and survivors:
+    _fund_t0 = time.perf_counter()
+    if survivors:
+        def _fund(s: str):
+            f = feed.fundamentals(s)
+            if market_store is not None:
+                try:
+                    market_store.log_fetch(s, "fundamentals", rows=0, source="feed")
+                except Exception:  # noqa: BLE001 - best-effort
+                    pass
+            return f
+
         fund_map = scan_fundamentals(
             survivors,
-            lambda s: feed.fundamentals(s),
+            _fund,
             workers=max(1, workers // 2),
             limiter=limiter,
         )
     else:
         fund_map = {}
+    stages.add("fundamentals", time.perf_counter() - _fund_t0, count=len(fund_map))
 
     # --- step 5: score + build thesis -----------------------------------
+    _score_t0 = time.perf_counter()
     for sym, series, fired in pending:
         fund = fund_map.get(sym) or Fundamentals(symbol=sym)
         if sym not in fund_map and strategy.needs_fundamentals:
@@ -295,6 +331,21 @@ def run_strategy(
             continue
 
         report.theses.append(thesis)
+
+        from .tiers import size_tier
+        from .tiers import warnings as tier_warnings
+
+        price = series.bars[-1].close if series.bars else None
+        tier = size_tier(market=series.market, price=price, fund=fund, bars=series.bars)
+        tier["warnings"] = tier_warnings(tier)
+        payload = dict(thesis.payload or {})
+        payload["tier"] = tier
+        if price is not None:
+            payload["last_price"] = round(price, 4)
+        import dataclasses as _dc
+
+        thesis = _dc.replace(thesis, payload=payload)
+        report.theses[-1] = thesis
 
         _led(
             "score.computed", subject=sym, thesis_id=thesis.id,
@@ -322,6 +373,7 @@ def run_strategy(
             "confidence": thesis.confidence, "pattern": primary,
             "pattern_strength": strength,
             "evidence": [e.to_dict() for e in thesis.evidence],
+            "tier": tier,
             "detail": {"thesis_id": thesis.id},
         }
         report.observations.append(obs)
@@ -335,7 +387,9 @@ def run_strategy(
             )
             store.save_thesis(thesis, run_id=run_id)
 
+    stages.add("score", time.perf_counter() - _score_t0, count=len(pending))
     report.elapsed_s = time.perf_counter() - started
+    report.stages = stages.summary()
     if on_progress:
         on_progress(report.scanned, report.hits)
     return report
@@ -348,6 +402,7 @@ def run(
     feed: Any,
     market: str = "IN",
     store: Any | None = None,
+    market_store: Any | None = None,
     strategy_options: Mapping[str, Mapping[str, Any]] | None = None,
     **kwargs: Any,
 ) -> dict[str, ScanReport]:
@@ -377,6 +432,7 @@ def run(
             market=market,
             store=store,
             run_id=run_id,
+            market_store=market_store,
             strategy_options=opts.get(name, {}),
             **kwargs,
         )

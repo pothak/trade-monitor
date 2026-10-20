@@ -7,8 +7,9 @@ registry by name; nothing hardcodes a concrete implementation.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Generic, Iterable, TypeVar
+from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
 

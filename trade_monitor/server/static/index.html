@@ -6,9 +6,9 @@
 <title>trade-monitor</title>
 <style>
   :root {
-    --bg: #0e1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
-    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
-    --amber: #d29922;
+    --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de; --text: #1f2328;
+    --muted: #656d76; --accent: #0969da; --green: #1a7f37; --red: #cf222e;
+    --amber: #9a6700;
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -18,32 +18,64 @@
   header h1 { font-size: 16px; margin: 0; }
   header .ver { color: var(--muted); font-size: 12px; }
   header .spacer { flex: 1; }
+  .scan-wrap { position: relative; display: inline-block; }
+  .suggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+    background: #ffffff; border: 1px solid var(--border); border-radius: 6px;
+    margin-top: 2px; max-height: 260px; overflow-y: auto; display: none;
+    box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+  .suggest.open { display: block; }
+  .suggest .opt { padding: 5px 10px; font-size: 13px; cursor: pointer;
+    font-family: ui-monospace, monospace; }
+  .suggest .opt:hover, .suggest .opt.sel { background: var(--accent); color: #fff; }
+  .suggest .opt .src { color: var(--muted); font-size: 11px; float: right; }
+  .suggest .opt:hover .src, .suggest .opt.sel .src { color: #dbeafe; }
   .layout { display: grid; grid-template-columns: 1fr 380px; height: calc(100vh - 61px); }
   .layout > div { overflow: auto; padding: 20px 24px; }
   .right { border-left: 1px solid var(--border); }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
        color: var(--muted); margin: 0 0 12px; }
-  button { background: var(--accent); color: #04121f; border: 0; border-radius: 6px;
+  button { background: var(--accent); color: #ffffff; border: 0; border-radius: 6px;
            padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
   button:hover { filter: brightness(1.1); }
   button.ghost { background: transparent; color: var(--text);
                  border: 1px solid var(--border); font-weight: 400; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
            gap: 12px; }
   .card { background: var(--panel); border: 1px solid var(--border);
-          border-radius: 8px; padding: 14px; cursor: pointer; }
-  .card:hover { border-color: var(--accent); }
-  .card .sym { font-weight: 700; font-size: 15px; }
-  .card .grade { float: right; padding: 1px 8px; border-radius: 4px;
-                 font-size: 12px; font-weight: 700; }
-  .grade.A { background: var(--green); color: #03170a; }
-  .grade.B { background: var(--accent); color: #04121f; }
-  .grade.C { background: var(--amber); color: #1d1600; }
-  .grade.D, .grade.F { background: var(--red); color: #1d0000; }
+          border-radius: 8px; padding: 12px 14px; }
+  .card .top { display: flex; align-items: baseline; gap: 8px; }
+  .card .sym { font-weight: 700; font-size: 16px; }
+  .card .mkt { color: var(--muted); font-size: 11px; }
+  .card .best { margin-left: auto; }
+  .grade { display: inline-block; padding: 1px 8px; border-radius: 4px;
+           font-size: 12px; font-weight: 700; min-width: 22px; text-align: center; }
+  .grade.A { background: var(--green); color: #ffffff; }
+  .grade.B { background: var(--accent); color: #ffffff; }
+  .grade.C { background: var(--amber); color: #ffffff; }
+  .grade.D, .grade.F { background: var(--red); color: #ffffff; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+         border-top: 1px solid var(--border); font-size: 13px; cursor: pointer; }
+  .row:first-of-type { border-top: 0; }
+  .row:hover { background: #edf2f7; margin: 0 -14px; padding: 6px 14px; }
+  .row .strat { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                white-space: nowrap; }
+  .row .conf { color: var(--muted); font-size: 12px; }
   .card .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .fresh { display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+           background: var(--panel); border: 1px solid var(--border);
+           border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .fresh .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                margin-right: 6px; vertical-align: middle; }
+  .fresh .dot.ok { background: var(--green); }
+  .fresh .dot.stale { background: var(--amber); }
+  .fresh .dot.none { background: var(--muted); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  th[data-sort]:hover { color: var(--accent); }
+  .tk-row { cursor: pointer; }
+  .tk-row:hover { background: #edf2f7; }
+  #tk-table td .grade { font-size: 11px; padding: 0 5px; }
   .tl { font-size: 12px; }
   .tl .k { color: var(--accent); }
   .empty { color: var(--muted); padding: 40px 0; text-align: center; }
@@ -51,9 +83,102 @@
            background: var(--panel); border: 1px solid var(--border);
            font-size: 11px; color: var(--muted); }
   .quality { font-size: 11px; color: var(--amber); }
+  .filters { float: none; font-weight: 400; display: inline-flex;
+             align-items: center; gap: 8px; margin-left: 10px;
+             vertical-align: middle; }
+  .filters select, .filters input {
+    font-size: 12px; padding: 4px 8px; border-radius: 6px; height: 30px;
+    background: var(--bg); font-weight: 400; margin: 0; width: auto; }
+  .filters input::placeholder { color: var(--muted); font-weight: 400; }
+  .filters button { font-size: 12px; padding: 4px 12px; height: 30px;
+                    border-radius: 6px; }
+  /* The tab headers hold a title plus a control row; lay them out on one line
+     and let the controls wrap below only when the viewport is truly narrow. */
+  #view-tickers h2, #view-monitor h2 {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .legend { margin: 14px 0 4px; font-size: 13px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px;
+    background: var(--panel); }
+  .legend summary { cursor: pointer; color: var(--text); font-weight: 600; }
+  .legend p { margin: 8px 0; line-height: 1.5; }
+  .legend table { border-collapse: collapse; margin: 6px 0; }
+  .legend td { padding: 3px 10px 3px 0; vertical-align: top; }
+  .legend .grade { display: inline-block; min-width: 20px; text-align: center; }
   input, select { background: var(--panel); color: var(--text);
                   border: 1px solid var(--border); border-radius: 6px;
                   padding: 7px 10px; font: inherit; }
+  nav { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border); }
+  nav button { background: transparent; color: var(--muted); font-weight: 500;
+               border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+               padding: 10px 12px; }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .pill { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px;
+          border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
+  .pill.ok { background: #dafbe1; color: #1a7f37; }
+  .pill.disabled { background: #eaeef2; color: #656d76; }
+  .pill.error { background: #ffebe9; color: #cf222e; }
+  .pill.builtin { background: #ddf4ff; color: #0969da; }
+  .pill.spec { background: #fff8c5; color: #9a6700; }
+  .pill.code { background: #fbefff; color: #8250df; }
+  .plugin { display: flex; align-items: flex-start; gap: 12px; padding: 12px;
+            border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+  .plugin .body { flex: 1; min-width: 0; }
+  .plugin .nm { font-weight: 600; }
+  .plugin .desc { color: var(--muted); font-size: 12px; margin-top: 3px;
+                  white-space: pre-wrap; }
+  .plugin .tags { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .plugin .acts { display: flex; gap: 6px; flex-shrink: 0; }
+  .plugin .acts button { padding: 5px 10px; font-size: 12px; }
+  .plugin.off { opacity: .6; }
+  .plugin .vol { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .plugin .acts button.danger { color: var(--red); }
+  .kindhead { display: flex; align-items: flex-start; gap: 16px;
+              justify-content: space-between; margin: 14px 0 6px; }
+  .kindhead h3 { margin: 0 0 2px; }
+  .kindhead p { margin: 0; color: var(--muted); font-size: 12px; max-width: 60ch;
+                line-height: 1.5; }
+  .kindhead button { flex-shrink: 0; }
+  .plugsec { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+             color: var(--muted); margin: 18px 0 6px; }
+  .kindtab { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; }
+  .kindtab button { padding: 6px 12px; }
+  .modal { position: fixed; inset: 0; background: #0009; display: flex;
+           align-items: center; justify-content: center; }
+  .modal .box { background: var(--bg); border: 1px solid var(--border);
+                border-radius: 10px; padding: 20px; width: 460px; max-width: 92vw; }
+  .modal .box h3 { margin: 0 0 14px; }
+  .modal label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .modal input, .modal select, .modal textarea { width: 100%; }
+  pre.src { background: var(--panel); border: 1px solid var(--border);
+            border-radius: 6px; padding: 10px; font-size: 12px; overflow: auto;
+            max-height: 320px; }
+  .verdict { font-size: 15px; line-height: 1.4; margin: 2px 0 12px; }
+  .pcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px; }
+  .pcard { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 8px; padding: 10px 12px; }
+  .pcard .pl { font-size: 11px; color: var(--muted); text-transform: uppercase;
+               letter-spacing: .03em; }
+  .pcard .pv { font-size: 19px; font-weight: 700; margin-top: 2px; }
+  .pcard .ps { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pcard .ps.up { color: var(--green); }
+  .pcard .ps.down { color: var(--red); }
+  .legend-inline { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px;
+                   color: var(--muted); }
+  .legend-inline i { display: inline-block; width: 10px; height: 3px;
+                     border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  .ai-box { background: linear-gradient(180deg,#f0f6ff,#f6f8fa);
+            border: 1px solid #cfe3ff; border-radius: 8px;
+            padding: 12px 14px; font-size: 13px; line-height: 1.5; }
+  .ai-box.off { background: var(--panel); border-color: var(--border);
+                color: var(--muted); font-size: 12px; }
+  .ai-box .aid { font-size: 10px; color: var(--muted); margin-top: 6px; }
+  .chk { font-size: 12px; color: var(--muted); display: inline-flex;
+         align-items: center; gap: 4px; white-space: nowrap; }
+  .sess { font-size: 11px; padding: 2px 8px; border-radius: 10px;
+          background: var(--panel); border: 1px solid var(--border);
+          color: var(--muted); white-space: nowrap; }
+  .sess.open { background: #dafbe1; color: #1a7f37; border-color: #aceebb; }
 </style>
 </head>
 <body>
@@ -61,31 +186,136 @@
   <h1>trade-monitor</h1>
   <span class="ver" id="ver"></span>
   <span class="spacer"></span>
-  <input id="scan-syms" placeholder="symbols (blank = universe)" size="22">
+  <span class="scan-wrap">
+    <input id="scan-syms" placeholder="symbols (blank = universe)" size="22"
+           autocomplete="off" spellcheck="false">
+    <div id="scan-suggest" class="suggest"></div>
+  </span>
   <select id="scan-market"><option>IN</option><option>US</option></select>
+  <label class="chk" title="Scan even when the market is closed">
+    <input type="checkbox" id="scan-force"> fetch anyway</label>
+  <span id="session-badge" class="sess"></span>
   <button id="scan-btn">Run scan</button>
 </header>
 
-<div class="layout">
+<nav>
+  <button id="tab-monitor" class="active">Monitor</button>
+  <button id="tab-tickers">All tickers</button>
+  <button id="tab-plugins">Plugins</button>
+</nav>
+
+<div class="layout" id="view-monitor">
   <div class="left">
-    <h2>Theses <span class="badge" id="thesis-count">0</span></h2>
+    <div class="fresh" id="fresh-banner"></div>
+    <h2>Theses <span class="badge" id="thesis-count">0</span>
+      <span class="filters">
+        <select id="f-market">
+          <option value="">All countries</option>
+          <option value="IN">India</option>
+          <option value="US">United States</option>
+        </select>
+        <select id="f-grade">
+          <option value="">All grades</option>
+          <option value="A">A only</option>
+          <option value="B">B or better</option>
+          <option value="C">C or better</option>
+        </select>
+        <select id="f-strat">
+          <option value="">All strategies</option>
+        </select>
+      </span>
+    </h2>
     <div class="cards" id="theses"></div>
+    <details class="legend">
+      <summary>How to read a grade</summary>
+      <p>Each card is one stock. Inside it, every strategy that scored that
+      stock, ranked best first. A grade is <b>one strategy's verdict</b> — the
+      same stock grades differently under different strategies because they ask
+      different questions. Grades are A–F; <b>confidence</b> (0–100) is the
+      share of that strategy's criteria that passed.</p>
+      <table>
+        <tr><td><span class="grade A">A</span></td><td>Most or all criteria pass — strong setup for this strategy</td></tr>
+        <tr><td><span class="grade B">B</span></td><td>Most pass, one weak — decent, worth watching</td></tr>
+        <tr><td><span class="grade C">C</span></td><td>Split signals — mixed</td></tr>
+        <tr><td><span class="grade D">D</span></td><td>Mostly fail — weak setup</td></tr>
+        <tr><td><span class="grade F">F</span></td><td>Nearly all fail, or a blocking rule rejected it</td></tr>
+      </table>
+      <p>Click a strategy row to see the <b>evidence</b> (why, criterion by
+      criterion), the <b>invalidation</b> (what would prove it wrong), and the
+      <b>audit trail</b> (the exact inputs behind the grade).</p>
+    </details>
     <div class="empty" id="theses-empty">
       No theses yet. Run a scan, or seed data first:<br><br>
       <code>trade-monitor seed --limit 50</code><br>
       <code>trade-monitor scan --strategy canslim</code>
     </div>
 
-    <h2 style="margin-top:28px">Recent runs</h2>
-    <table id="runs"><tbody></tbody></table>
-
-    <h2 style="margin-top:28px">Data coverage</h2>
+    <h2 style="margin-top:22px">System runs <span class="badge" id="runs-count">0</span></h2>
+    <table id="runs">
+      <thead><tr><th>Strategy</th><th>Market</th><th>Symbols</th><th>Hits</th><th>Started</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h2 style="margin-top:20px">Data coverage</h2>
     <table id="coverage"><tbody></tbody></table>
+    <h2 style="margin-top:20px">Audit trail <span class="badge" id="ledger-count">0</span></h2>
+    <div id="ledger" class="tl"></div>
   </div>
 
-  <div class="right">
-    <h2>Audit trail <span class="badge" id="ledger-count">0</span></h2>
-    <div id="ledger" class="tl"></div>
+  <div class="right" id="detail-pane">
+    <h2 id="detail-title">Details</h2>
+    <div id="detail-body" class="empty">Click a strategy row to see its evidence.</div>
+  </div>
+</div>
+
+<div class="layout" id="view-plugins" style="display:none">
+  <div class="left" style="grid-column: 1 / -1">
+    <h2>Plugin console</h2>
+    <p style="color:var(--muted);margin:0 0 6px">
+      Every component the engine can use. Create a feed or strategy here;
+      edit code in your own editor, then reload the console.
+    </p>
+    <div class="kindtab" id="kindtab"></div>
+    <div id="plugins"></div>
+  </div>
+</div>
+
+<div class="layout" id="view-tickers" style="display:none">
+  <div class="left" style="grid-column: 1 / -1">
+    <h2>All tickers <span class="badge" id="tk-scanned">0</span>
+      <span class="filters">
+        <input id="tk-search" placeholder="search symbol…" size="16"
+               autocomplete="off" spellcheck="false">
+        <select id="tk-market">
+          <option value="US">United States (S&amp;P 500)</option>
+          <option value="IN">India (NSE)</option>
+        </select>
+        <select id="tk-only">
+          <option value="all">All rows</option>
+          <option value="scanned">Scanned only</option>
+          <option value="actionable">Graded A–B only</option>
+        </select>
+        <button id="scan-all-btn" onclick="scanAll()">Scan all</button>
+      </span>
+    </h2>
+    <div class="fresh" id="tk-job"></div>
+    <p style="color:var(--muted);margin:6px 0 12px" id="tk-summary"></p>
+    <table id="tk-table">
+      <thead><tr>
+        <th data-sort="symbol">Symbol</th>
+        <th data-sort="market">Mkt</th>
+        <th data-sort="price">Price</th>
+        <th data-sort="best_grade">Grade</th>
+        <th data-sort="best_confidence">Conf</th>
+        <th>Strategies</th>
+        <th data-sort="target">Target</th>
+        <th data-sort="size">Size</th>
+        <th data-sort="liquidity">Liquidity</th>
+        <th data-sort="as_of">As of</th>
+        <th data-sort="fetched_age_s">Freshness</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="tk-pager" style="display:flex;gap:10px;align-items:center;margin:10px 0"></div>
   </div>
 </div>
 
@@ -101,6 +331,24 @@ async function api(path, opts) {
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g,
   c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
+let SESSIONS = {};
+async function loadSessions() {
+  try {
+    const r = await api("/api/sessions");
+    SESSIONS = r.sessions || {};
+    updateSessionBadge();
+  } catch (e) { /* ignore */ }
+}
+function updateSessionBadge() {
+  const el = $("#session-badge");
+  const sel = $("#scan-market");
+  if (!el || !sel) return;
+  const s = SESSIONS[sel.value];
+  if (!s) { el.textContent = ""; return; }
+  el.textContent = s.status === "open" ? "market open" : "market " + s.status;
+  el.className = "sess" + (s.is_open ? " open" : "");
+}
+
 async function loadHealth() {
   const h = await api("/api/health");
   $("#ver").textContent = "v" + h.version;
@@ -113,31 +361,111 @@ async function loadHealth() {
     <tr><th>db</th><td style="color:var(--muted)">${esc(cov.path ?? "—")}</td></tr>`;
 }
 
+function ageLabel(sec) {
+  if (sec == null) return "";
+  if (sec < 90) return "just now";
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.round(sec / 3600)}h ago`;
+  return `${Math.round(sec / 86400)}d ago`;
+}
+
+const GRADE_ORDER = { A: 0, B: 1, C: 2, D: 3, F: 4 };
+let THESES_BY_STOCK = {};
+let FRESH = {};
+
+async function loadFreshness(market) {
+  let fr = { items: [] };
+  try { fr = await api("/api/freshness"); } catch (e) { /* best-effort */ }
+  FRESH = {};
+  (fr.items || []).forEach(i => { FRESH[i.symbol] = i.age_s; });
+
+  const markets = market ? [market] : ["IN", "US"];
+  const bits = markets.map(m => {
+    const syms = Object.keys(FRESH).filter(s => (m === "US") === !s.endsWith(".NS"));
+    if (!syms.length) return `<span><span class="dot none"></span>${m}: no data yet</span>`;
+    const newest = Math.min(...syms.map(s => FRESH[s]));
+    const cls = newest < 3600 ? "ok" : "stale";
+    return `<span><span class="dot ${cls}"></span>${m}: ${syms.length} symbols, fetched ${ageLabel(newest)}</span>`;
+  });
+  $("#fresh-banner").innerHTML =
+    `<span style="color:var(--muted)">Data freshness</span>` + bits.join("");
+}
+
 async function loadTheses() {
-  const { theses } = await api("/api/theses?limit=60");
+  const mkt = $("#f-market") ? $("#f-market").value : "";
+  const grade = $("#f-grade") ? $("#f-grade").value : "";
+  const strat = $("#f-strat") ? $("#f-strat").value : "";
+  const qs = new URLSearchParams({ limit: "200" });
+  if (mkt) qs.set("market", mkt);
+  if (grade) qs.set("min_grade", grade);
+
+  let theses = [];
+  try {
+    const tr = await api("/api/theses?" + qs.toString());
+    theses = tr.theses || [];
+  } catch (e) { return; }
+
+  await loadFreshness(mkt);
+
+  const stratSel = $("#f-strat");
+  if (stratSel && stratSel.options.length <= 1) {
+    [...new Set(theses.map(t => t.strategy))].sort().forEach(s => {
+      const o = document.createElement("option");
+      o.value = s; o.textContent = s; stratSel.appendChild(o);
+    });
+  }
+  if (strat) theses = theses.filter(t => t.strategy === strat);
+
   $("#thesis-count").textContent = theses.length;
   $("#theses-empty").style.display = theses.length ? "none" : "block";
-  $("#theses").innerHTML = theses.map(t => {
-    const g = esc(t.grade || "?");
-    const conf = t.confidence != null ? `${Math.round(t.confidence * (t.confidence <= 1 ? 100 : 1))}%` : "—";
-    const pat = (t.patterns || []).join(", ") || "—";
-    const q = (t.degraded && t.degraded.length)
-      ? `<div class="quality">⚠ data: ${esc(t.degraded.join(", "))}</div>` : "";
-    return `<div class="card" onclick="showThesis('${esc(t.thesis_id)}')">
-      <span class="grade ${g}">${g}</span>
-      <div class="sym">${esc(t.symbol)}</div>
-      <div class="meta">grade ${g} · conf ${conf}</div>
-      <div class="meta">${esc(pat)}</div>${q}</div>`;
+
+  const byStock = {};
+  theses.forEach(t => { (byStock[t.symbol] = byStock[t.symbol] || []).push(t); });
+
+  const order = t => GRADE_ORDER[t.grade] ?? 9;
+  const stocks = Object.keys(byStock).sort((a, b) => {
+    const ba = Math.min(...byStock[a].map(order));
+    const bb = Math.min(...byStock[b].map(order));
+    return ba - bb || a.localeCompare(b);
+  });
+
+  $("#theses").innerHTML = stocks.map(sym => {
+    const list = byStock[sym].sort((a, b) => order(a) - order(b) ||
+      (b.confidence || 0) - (a.confidence || 0));
+    const best = list[0];
+    const rows = list.map(t => {
+      const id = t.id;
+      const warn = (t.degraded_inputs && t.degraded_inputs.length)
+        ? `<span class="quality" title="${esc(t.degraded_inputs.join(", "))}">⚠</span>` : "";
+      return `<div class="row" onclick="showThesis('${esc(id)}')">
+        <span class="grade ${esc(t.grade)}">${esc(t.grade)}</span>
+        <span class="strat">${esc(t.strategy)} ${warn}</span>
+        <span class="conf">${t.confidence}</span></div>`;
+    }).join("");
+    const tier = best.payload && best.payload.tier;
+    const tierTag = tier ? `${esc(tier.size)} · liq ${esc(tier.liquidity)}` : "";
+    const age = FRESH[sym] != null ? ` · data ${ageLabel(FRESH[sym])}` : "";
+    return `<div class="card">
+      <div class="top">
+        <span class="sym">${esc(sym)}</span>
+        <span class="mkt">${esc(best.market || "")}</span>
+        <span class="best"><span class="grade ${esc(best.grade)}">${esc(best.grade)}</span></span>
+      </div>
+      <div class="meta">${tierTag}${age}</div>
+      ${rows}
+    </div>`;
   }).join("");
 }
 
 async function loadRuns() {
   const runs = await api("/api/runs?limit=10");
+  const cnt = $("#runs-count");
+  if (cnt) cnt.textContent = runs.length;
   $("#runs tbody").innerHTML = runs.length ? runs.map(r => `
     <tr><td>${esc(r.strategy || "")}</td><td>${esc(r.market || "")}</td>
     <td>${r.symbols ?? ""}</td><td>${r.hits ?? ""}</td>
     <td style="color:var(--muted)">${esc(r.started_at || r.created_at || "")}</td></tr>`
-  ).join("") : `<tr><td style="color:var(--muted)">none</td></tr>`;
+  ).join("") : `<tr><td colspan="5" style="color:var(--muted)">none</td></tr>`;
 }
 
 async function loadLedger() {
@@ -150,49 +478,628 @@ async function loadLedger() {
   ).join("") : `<div style="color:var(--muted)">no events yet</div>`;
 }
 
+function fmtPrice(v, cur) {
+  if (v == null) return "—";
+  const sym = cur === "INR" ? "₹" : (cur === "USD" ? "$" : "");
+  return sym + v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function plainMood(txt) {
+  return `“${esc(txt)}”`;
+}
+
+function drawChart(canvas, bars, tech, inv, cur) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 640, h = 220;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext("2d");
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, w, h);
+  if (!bars || !bars.length) return;
+
+  const pad = { l: 8, r: 64, t: 12, b: 20 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+  const closes = bars.map(b => b.close);
+  const extras = [];
+  if (tech) [tech.ma20, tech.ma50, tech.ma200].forEach(m => m != null && extras.push(m));
+  if (inv && inv.stop_price != null) extras.push(inv.stop_price);
+  if (tech && tech.range_low != null) extras.push(tech.range_low);
+  if (tech && tech.range_high != null) extras.push(tech.range_high);
+  let lo = Math.min(...closes, ...extras), hi = Math.max(...closes, ...extras);
+  const padY = (hi - lo) * 0.06 || 1; lo -= padY; hi += padY;
+  const X = i => pad.l + (i / (bars.length - 1)) * plotW;
+  const Y = v => pad.t + (1 - (v - lo) / (hi - lo)) * plotH;
+
+  const hline = (v, color, label) => {
+    if (v == null) return;
+    g.strokeStyle = color; g.setLineDash([4, 3]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(pad.l, Y(v)); g.lineTo(w - pad.r, Y(v)); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = color; g.font = "10px ui-monospace,monospace";
+    g.fillText(label, w - pad.r + 4, Y(v) + 3);
+  };
+  if (tech) {
+    hline(tech.range_high, "#8b949e", "52w hi");
+    hline(tech.range_low, "#8b949e", "52w lo");
+  }
+
+  const line = (vals, color, wdt) => {
+    g.strokeStyle = color; g.lineWidth = wdt; g.beginPath();
+    vals.forEach((v, i) => { v == null ? 0 : (i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); });
+    g.stroke();
+  };
+  if (tech && tech.ma200 != null) line(bars.map(() => tech.ma200), "#c58af9", 1);
+  if (tech && tech.ma50 != null) line(bars.map(() => tech.ma50), "#d29922", 1);
+  if (tech && tech.ma20 != null) line(bars.map(() => tech.ma20), "#0969da", 1);
+  line(closes, "#1f2328", 1.6);
+
+  if (inv && inv.stop_price != null) hline(inv.stop_price, "#cf222e", "stop");
+  if (tech && tech.last != null) hline(tech.last, "#1a7f37", "now");
+
+  g.fillStyle = "#656d76"; g.font = "10px ui-monospace,monospace";
+  g.fillText(bars[0].date, pad.l, h - 6);
+  const lastDate = bars[bars.length - 1].date;
+  const tw = g.measureText(lastDate).width;
+  g.fillText(lastDate, w - pad.r - tw, h - 6);
+}
+
+function verdictLine(t, tech, inv) {
+  const cur = t.currency;
+  const last = tech ? tech.last : null;
+  const bits = [];
+  const trend = tech ? tech.trend : null;
+  if (trend === "uptrend") bits.push("trend is up");
+  else if (trend === "downtrend") bits.push("trend is down");
+  else if (trend) bits.push("trend is sideways");
+  if (tech && tech.rsi_note) bits.push(`momentum ${tech.rsi_note}`);
+  return bits.length ? bits.join(", ") : "not enough data";
+}
+
 async function showThesis(id) {
   const r = await api("/api/thesis/" + encodeURIComponent(id));
   const t = r.thesis || {};
-  const tl = (r.timeline || []).map(e =>
-    `<div style="padding:3px 0"><span class="k">${esc(e.kind)}</span>
+  const tech = r.technicals || {};
+  const bars = r.bars || [];
+  const inv = t.invalidation || {};
+  const cur = t.currency;
+
+  const last = tech.last != null ? tech.last : null;
+  const target = t.measured_move_target;
+  const stop = inv.stop_price;
+
+  // Plain-language price panel.
+  let upside = null;
+  if (target != null && last != null) upside = (target / last - 1) * 100;
+  let rr = null;
+  if (target != null && stop != null && last != null && last > stop)
+    rr = (target - last) / (last - stop);
+
+  const priceCards = [
+    `<div class="pcard"><div class="pl">Current price</div>
+       <div class="pv">${fmtPrice(last, cur)}</div></div>`,
+    `<div class="pcard"><div class="pl">Expected ceiling</div>
+       <div class="pv">${target != null ? fmtPrice(target, cur) : "—"}</div>
+       ${upside != null ? `<div class="ps ${upside >= 0 ? "up" : "down"}">${upside >= 0 ? "+" : ""}${upside.toFixed(1)}% from here</div>` : `<div class="ps">strategy gives no target</div>`}</div>`,
+    `<div class="pcard"><div class="pl">Floor (stop)</div>
+       <div class="pv">${stop != null ? fmtPrice(stop, cur) : "—"}</div>
+       ${stop != null && last != null ? `<div class="ps down">${((stop / last - 1) * 100).toFixed(1)}% risk</div>` : ``}</div>`,
+    `<div class="pcard"><div class="pl">Reward : risk</div>
+       <div class="pv">${rr != null ? rr.toFixed(1) + " : 1" : "—"}</div>
+       <div class="ps">${rr == null ? "needs a target" : (rr >= 2 ? "favourable" : "thin")}</div></div>`,
+  ].join("");
+
+  const ev = (t.evidence || []).map(e => `
+    <tr>
+      <td><span class="${e.verdict === "pass" ? "pill ok" : "pill error"}">${esc(e.verdict)}</span></td>
+      <td>${esc(e.label)}</td>
+      <td style="color:var(--muted)">${esc(e.rationale || "")}</td>
+    </tr>`).join("");
+
+  const invBits = [];
+  if (stop != null) invBits.push(`stop ${fmtPrice(stop, cur)}`);
+  if (inv.time_stop_days != null) invBits.push(`time stop ${inv.time_stop_days}d`);
+  if (inv.rule) invBits.push(inv.rule);
+
+  const degraded = (t.degraded_inputs && t.degraded_inputs.length)
+    ? `<div class="quality" style="margin-top:8px">⚠ limited data: ${esc(t.degraded_inputs.join(", "))}</div>` : "";
+
+  const timeline = (r.timeline || []).map(e =>
+    `<div style="padding:2px 0"><span class="k">${esc(e.kind)}</span>
      <span style="color:var(--muted)"> ${esc(e.summary)}</span></div>`).join("");
-  $("#ledger").previousElementSibling?.lastChild;
-  document.querySelector(".right h2").innerHTML =
-    `Thesis <span class="badge">${esc(t.symbol || id)}</span>`;
-  $("#ledger").innerHTML =
-    `<div style="margin-bottom:10px"><b>${esc(t.symbol || "")}</b> ·
-      grade ${esc(t.grade || "?")}</div>` +
-    (tl || `<div style="color:var(--muted)">no ledger events linked</div>`);
+
+  const trow = (label, val, note) =>
+    `<tr><th>${label}</th><td>${val}</td><td style="color:var(--muted)">${note || ""}</td></tr>`;
+  const technicals = tech && tech.last != null ? `
+    <table>
+      ${trow("RSI (14)", tech.rsi14 ?? "—", tech.rsi_note)}
+      ${trow("Trend", tech.trend ?? "—",
+        "vs 20/50-day moving averages")}
+      ${trow("20-day MA", fmtPrice(tech.ma20, cur), "")}
+      ${trow("50-day MA", fmtPrice(tech.ma50, cur), "")}
+      ${trow("200-day MA", fmtPrice(tech.ma200, cur), "")}
+      ${trow("52-week range", `${fmtPrice(tech.range_low, cur)} – ${fmtPrice(tech.range_high, cur)}`,
+        `${(tech.pct_from_high ?? 0).toFixed(1)}% from high`)}
+    </table>` : `<p style="color:var(--muted)">No price history available.</p>`;
+
+  $("#detail-title").innerHTML =
+    `${esc(t.symbol || id)} <span class="grade ${esc(t.grade)}">${esc(t.grade)}</span>
+     <span class="badge">${esc(t.strategy || "")}</span>`;
+  $("#detail-body").className = "";
+  $("#detail-body").innerHTML = `
+    <p class="verdict">${plainMood(verdictLine(t, tech, inv))}</p>
+    <div class="pcards">${priceCards}</div>
+    <canvas id="detail-chart" style="width:100%;height:220px;margin:10px 0"></canvas>
+    <div class="legend-inline">
+      <span><i style="background:#1f2328"></i>price</span>
+      <span><i style="background:#0969da"></i>20d</span>
+      <span><i style="background:#d29922"></i>50d</span>
+      <span><i style="background:#c58af9"></i>200d</span>
+      <span><i style="background:#1a7f37"></i>now</span>
+      <span><i style="background:#cf222e"></i>stop</span>
+    </div>
+
+    <h2 style="margin-top:16px">Price context</h2>
+    ${technicals}
+
+    <h2 style="margin-top:16px">Why this grade</h2>
+    <table>${ev || `<tr><td style="color:var(--muted)">no evidence rows</td></tr>`}</table>
+    ${invBits.length ? `<p><b>Invalidation:</b> ${esc(invBits.join(" · "))}</p>` : ""}
+    ${t.narrative ? `<p style="color:var(--muted)">${esc(t.narrative)}</p>` : ""}
+    ${degraded}
+
+    <h2 style="margin-top:16px">AI reading <span class="badge">beta</span></h2>
+    <div id="ai-box" class="ai-box">interpreting…</div>
+
+    <h2 style="margin-top:18px">Audit trail</h2>
+    <div class="tl">${timeline || `<div style="color:var(--muted)">no events linked</div>`}</div>`;
+
+  const cv = $("#detail-chart");
+  if (cv) drawChart(cv, bars, tech, inv, cur);
+  loadAI(id);
+}
+
+async function loadAI(id) {
+  const box = $("#ai-box");
+  if (!box) return;
+  try {
+    const r = await api("/api/thesis/" + encodeURIComponent(id) + "/ai");
+    if (r.ok) {
+      box.innerHTML = `<p style="margin:0">${esc(r.text)}</p>
+        <div class="aid">interpretation by ${esc(r.model || "model")} ·
+        explains the engine's numbers, does not decide</div>`;
+    } else {
+      box.classList.add("off");
+      box.textContent = r.reason || "AI unavailable";
+    }
+  } catch (e) {
+    box.classList.add("off");
+    box.textContent = "AI unavailable: " + e.message;
+  }
 }
 
 async function runScan() {
   const btn = $("#scan-btn");
+  const syms = $("#scan-syms").value.trim();
   btn.disabled = true; btn.textContent = "Scanning…";
   const body = {
     market: $("#scan-market").value,
-    symbols: $("#scan-syms").value.trim() || null,
+    symbols: syms || null,
     limit: 25,
+    force: $("#scan-force") ? $("#scan-force").checked : false,
   };
   try {
-    await api("/api/scan", {
+    const r = await api("/api/scan", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    setTimeout(refresh, 1500);
+    if (r && r.started === false) {
+      alert("Scan not started: " + (r.reason || "busy") +
+            " — see the scan progress on the All tickers tab.");
+    } else {
+      pollJob();
+      setTimeout(refresh, 1500);
+    }
   } catch (e) { alert("scan failed: " + e.message); }
   finally { btn.disabled = false; btn.textContent = "Run scan"; }
 }
 
 function refresh() {
   loadHealth().catch(() => {});
+  loadSessions().catch(() => {});
   loadTheses().catch(() => {});
   loadRuns().catch(() => {});
   loadLedger().catch(() => {});
 }
 
 $("#scan-btn").addEventListener("click", runScan);
+const scanMkt = $("#scan-market");
+if (scanMkt) scanMkt.addEventListener("change", updateSessionBadge);
+
+// Symbol search in the header: type -> suggest from the tickers index ->
+// click to fill and kick off a scan for that symbol.
+let SG_TIMER = null;
+function closeSuggest() {
+  const box = $("#scan-suggest");
+  if (box) { box.classList.remove("open"); box.innerHTML = ""; }
+}
+async function suggestSymbols(q) {
+  const box = $("#scan-suggest");
+  if (!box) return;
+  if (!q) return closeSuggest();
+  try {
+    const r = await api("/api/tickers?q=" + encodeURIComponent(q) +
+                        "&page_size=8&sort=symbol");
+    const rows = r.tickers || [];
+    if (!rows.length) return closeSuggest();
+    box.innerHTML = rows.map(x =>
+      `<div class="opt" data-sym="${esc(x.symbol)}" data-mkt="${esc(x.market || "")}">
+         ${esc(x.symbol)} <span class="src">${esc(x.market || "")}${
+           x.best_grade ? " · " + esc(x.best_grade) : ""}</span></div>`).join("");
+    box.classList.add("open");
+    box.querySelectorAll(".opt").forEach(o => o.addEventListener("mousedown", ev => {
+      ev.preventDefault();
+      $("#scan-syms").value = o.dataset.sym;
+      if (o.dataset.mkt) $("#scan-market").value = o.dataset.mkt;
+      closeSuggest();
+      runScan();
+    }));
+  } catch (e) { closeSuggest(); }
+}
+const scanInput = $("#scan-syms");
+if (scanInput) {
+  scanInput.addEventListener("input", () => {
+    clearTimeout(SG_TIMER);
+    const q = scanInput.value.trim();
+    SG_TIMER = setTimeout(() => suggestSymbols(q).catch(() => {}), 200);
+  });
+  scanInput.addEventListener("blur", () => setTimeout(closeSuggest, 150));
+}
+["f-market", "f-grade", "f-strat"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("change", () => loadTheses().catch(() => {}));
+});
 refresh();
 setInterval(refresh, 15000);
+
+// ------------------------------------------------------------------ plugins
+const KINDS = ["strategy", "feed", "pattern", "validator", "delivery"];
+let activeKind = "strategy";
+let pluginCache = {};
+
+function showView(name) {
+  ["monitor", "tickers", "plugins"].forEach(v => {
+    const el = $("#view-" + v);
+    if (el) el.style.display = (v === name) ? "" : "none";
+    const tab = $("#tab-" + v);
+    if (tab) tab.classList.toggle("active", v === name);
+  });
+  if (name === "plugins") loadPlugins();
+  if (name === "tickers") { loadTickers(); pollJob(); }
+}
+$("#tab-monitor").addEventListener("click", () => showView("monitor"));
+$("#tab-tickers").addEventListener("click", () => showView("tickers"));
+$("#tab-plugins").addEventListener("click", () => showView("plugins"));
+
+// ------------------------------------------------------------------ tickers
+let TICKERS = [];
+let TK_SORT = { key: "best_grade", dir: 1 };
+const GRADE_RANK = { A: 0, B: 1, C: 2, D: 3, F: 4 };
+
+let TK_PAGE = 1;
+async function loadTickers() {
+  const market = $("#tk-market").value;
+  const only = $("#tk-only").value;
+  const q = $("#tk-search") ? $("#tk-search").value.trim() : "";
+
+  const qs = new URLSearchParams({ market, page: String(TK_PAGE), page_size: "100" });
+  if (q) qs.set("q", q);
+  if (only === "scanned") qs.set("status", "scanned");
+  else if (only === "actionable") qs.set("min_grade", "B");
+
+  let data;
+  try { data = await api("/api/tickers?" + qs.toString()); }
+  catch (e) { return; }
+
+  $("#tk-scanned").textContent = `${data.scanned} / ${data.universe}`;
+  $("#tk-summary").textContent =
+    `${data.scanned} of ${data.universe} symbols scored · ${data.pending} pending`
+    + (data.filtered !== data.universe ? ` · ${data.filtered} match filter` : "")
+    + ` · page ${data.page}/${data.pages}`;
+  TICKERS = data.tickers || [];
+  renderTickers();
+  renderPager(data);
+}
+
+function renderPager(data) {
+  const el = $("#tk-pager");
+  if (!el) return;
+  el.innerHTML = `
+    <button class="ghost" ${data.page <= 1 ? "disabled" : ""}
+      onclick="tkGo(${data.page - 1})">‹ Prev</button>
+    <span style="color:var(--muted)">page ${data.page} of ${data.pages}</span>
+    <button class="ghost" ${data.page >= data.pages ? "disabled" : ""}
+      onclick="tkGo(${data.page + 1})">Next ›</button>`;
+}
+function tkGo(p) { TK_PAGE = Math.max(1, p); loadTickers(); }
+
+function tkVal(r, key) {
+  if (key === "best_grade") return r.best_grade == null ? 99 : GRADE_RANK[r.best_grade];
+  if (key === "best_confidence") return r.best_confidence == null ? -1 : r.best_confidence;
+  if (key === "size") return (r.tier && r.tier.size) || "";
+  if (key === "liquidity") return (r.tier && r.tier.liquidity) || "";
+  if (key === "fetched_age_s") return r.fetched_age_s == null ? 1e12 : r.fetched_age_s;
+  return r[key] == null ? "" : r[key];
+}
+
+function fmtNum(v) {
+  if (v == null) return "—";
+  if (Math.abs(v) >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return v.toFixed(2);
+}
+
+function renderTickers() {
+  const { key, dir } = TK_SORT;
+  const rows = [...TICKERS].sort((a, b) => {
+    const va = tkVal(a, key), vb = tkVal(b, key);
+    return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
+  });
+  $("#tk-table tbody").innerHTML = rows.map(r => {
+    const g = r.best_grade
+      ? `<span class="grade ${esc(r.best_grade)}">${esc(r.best_grade)}</span>` : "—";
+    const strats = Object.keys(r.grades || {}).map(s =>
+      `${esc(s)} <span class="grade ${esc(r.grades[s])}">${esc(r.grades[s])}</span>`
+    ).join(" ") || "—";
+    const tier = r.tier || {};
+    const age = r.fetched_age_s == null ? "—" : ageLabel(r.fetched_age_s);
+    const firstId = Object.values(r.thesis_ids || {})[0];
+    const clickable = r.scanned && firstId;
+    let target = "—";
+    if (r.target != null && r.price != null) {
+      const up = ((r.target / r.price - 1) * 100);
+      const cls = up >= 0 ? "var(--green)" : "var(--red)";
+      target = `${fmtNum(r.target)} <span style="color:${cls}">(${up >= 0 ? "+" : ""}${up.toFixed(1)}%)</span>`;
+    } else if (r.target != null) {
+      target = fmtNum(r.target);
+    }
+    return `<tr ${clickable ? `class="tk-row" onclick="showThesis('${esc(firstId)}')"` : ""}>
+      <td><b>${esc(r.symbol)}</b></td>
+      <td>${esc(r.market || "")}</td>
+      <td>${fmtNum(r.price)}</td>
+      <td>${g}</td>
+      <td>${r.best_confidence ?? "—"}</td>
+      <td>${strats}</td>
+      <td>${target}</td>
+      <td>${esc(tier.size || "—")}</td>
+      <td>${esc(tier.liquidity || "—")}</td>
+      <td style="color:var(--muted)">${esc(r.as_of || "—")}</td>
+      <td style="color:var(--muted)">${age}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="11" style="color:var(--muted)">no rows</td></tr>`;
+}
+
+document.querySelectorAll("#tk-table th[data-sort]").forEach(th => {
+  th.style.cursor = "pointer";
+  th.addEventListener("click", () => {
+    const k = th.dataset.sort;
+    TK_SORT = { key: k, dir: TK_SORT.key === k ? -TK_SORT.dir : 1 };
+    renderTickers();
+  });
+});
+["tk-market", "tk-only"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("change", () => { TK_PAGE = 1; loadTickers().catch(() => {}); });
+});
+const tkSearch = $("#tk-search");
+if (tkSearch) {
+  let t = null;
+  tkSearch.addEventListener("input", () => {
+    clearTimeout(t);
+    t = setTimeout(() => { TK_PAGE = 1; loadTickers().catch(() => {}); }, 200);
+  });
+}
+
+let JOB_TIMER = null;
+async function pollJob() {
+  try {
+    const j = await api("/api/job");
+    if (j.running) {
+      const pct = j.total ? Math.round(100 * j.done / j.total) : 0;
+      $("#tk-job").innerHTML =
+        `<span class="dot stale"></span>Scanning ${esc(j.market)} · ${j.done}/${j.total} (${pct}%) · ${j.hits} hits`;
+      if (!JOB_TIMER) JOB_TIMER = setInterval(async () => {
+        await pollJob();
+        if ($("#view-tickers").style.display !== "none") loadTickers().catch(() => {});
+      }, 3000);
+    } else {
+      $("#tk-job").innerHTML = j.total
+        ? `<span class="dot ok"></span>Last scan ${esc(j.market)}: ${j.done}/${j.total}, ${j.hits} hits, ${j.errors} errors`
+        : "";
+      if (JOB_TIMER) { clearInterval(JOB_TIMER); JOB_TIMER = null; }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function scanAll() {
+  const btn = $("#scan-all-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
+  try {
+    const r = await api("/api/scan-all", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        market: $("#tk-market").value,
+        force: $("#scan-force") ? $("#scan-force").checked : false,
+      }),
+    });
+    if (r && r.started === false) {
+      alert("Scan not started: " + (r.reason || "busy"));
+    } else {
+      pollJob();
+    }
+  } catch (e) { alert("scan failed: " + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = "Scan all"; } }
+}
+
+
+function pill(kind, label) {
+  return `<span class="pill ${kind}">${esc(label)}</span>`;
+}
+
+// What each plugin kind actually is, in plain language. Shown on the tab and
+// at the top of each list so the console explains itself.
+const KIND_INFO = {
+  strategy: { label: "Strategies",
+    blurb: "The rules that score a stock and decide what to flag. Bring your own — drop a .py file in your strategies folder." },
+  feed: { label: "Data feeds",
+    blurb: "Where prices and fundamentals come from. One REST feed spec can point at almost any JSON API." },
+  pattern: { label: "Patterns",
+    blurb: "Chart shapes the strategies can look for, such as a cup-and-handle base." },
+  validator: { label: "Validators",
+    blurb: "Safety checks every thesis must pass before it reaches you — e.g. 'no thesis without an invalidation'." },
+  delivery: { label: "Delivery",
+    blurb: "Where a finished recommendation goes: the dashboard, a markdown file, or a message." },
+};
+
+function renderKindTabs() {
+  $("#kindtab").innerHTML = KINDS.map(k => {
+    const n = (pluginCache[k] || []).length;
+    return `<button data-kind="${k}" class="${k === activeKind ? "" : "ghost"}">
+      ${esc(KIND_INFO[k].label)} <span class="badge">${n}</span></button>`;
+  }).join("");
+  $("#kindtab").querySelectorAll("button").forEach(b =>
+    b.addEventListener("click", () => { activeKind = b.dataset.kind; renderKindTabs(); renderPlugins(); }));
+}
+
+function renderPlugins() {
+  const list = pluginCache[activeKind] || [];
+  const info = KIND_INFO[activeKind];
+  const canCreate = ["feed", "strategy", "pattern", "validator", "delivery"].includes(activeKind);
+  const head = `
+    <div class="kindhead">
+      <div>
+        <h3>${esc(info.label)}</h3>
+        <p>${esc(info.blurb)}</p>
+      </div>
+      ${canCreate ? `<button id="new-plugin">+ New ${esc(activeKind)}</button>` : ""}
+    </div>`;
+  if (!list.length) {
+    $("#plugins").innerHTML = head + `<div class="empty">Nothing here yet.</div>`;
+    const nb = $("#new-plugin"); if (nb) nb.addEventListener("click", () => openCreate(activeKind));
+    return;
+  }
+  // Yours first (things you can edit/delete), built-ins after.
+  const yours = list.filter(p => p.origin !== "builtin");
+  const builtin = list.filter(p => p.origin === "builtin");
+  const section = (title, items) => !items.length ? "" : `
+    <div class="plugsec">${esc(title)} <span class="badge">${items.length}</span></div>
+    ${items.map(renderPluginCard).join("")}`;
+
+  $("#plugins").innerHTML = head
+    + section("Yours", yours)
+    + section("Built in", builtin);
+
+  const nb = $("#new-plugin"); if (nb) nb.addEventListener("click", () => openCreate(activeKind));
+  $("#plugins").querySelectorAll("[data-toggle]").forEach(b =>
+    b.addEventListener("click", () => togglePlugin(b.dataset.toggle)));
+  $("#plugins").querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", () => deletePlugin(b.dataset.del)));
+  $("#plugins").querySelectorAll("[data-src]").forEach(b =>
+    b.addEventListener("click", () => viewSource(b.dataset.src, activeKind)));
+}
+
+function renderPluginCard(p) {
+  const enabled = p.enabled !== false && p.status !== "disabled";
+  const tags = [
+    enabled ? `<span class="pill ok">enabled</span>` : `<span class="pill disabled">disabled</span>`,
+    p.origin === "builtin" ? pill("builtin", "built in") : pill("code", "yours"),
+  ].filter(Boolean).join(" ");
+  const extra = [
+    p.requires && p.requires.length ? `needs: ${esc(p.requires.join(", "))}` : "",
+    p.provides && p.provides.length ? `gives: ${esc(p.provides.join(", "))}` : "",
+    p.reason ? `<span style="color:var(--red)">${esc(p.reason)}</span>` : "",
+  ].filter(Boolean).join(" &middot; ");
+  return `<div class="plugin ${enabled ? "" : "off"}">
+    <div class="body">
+      <div class="nm">${esc(p.name)} <span class="vol">v${esc(p.version)}</span></div>
+      <div class="desc">${esc(p.description || "")}</div>
+      <div class="tags">${tags}</div>
+      ${extra ? `<div class="desc">${extra}</div>` : ""}
+    </div>
+    <div class="acts">
+      ${p.source ? `<button class="ghost" data-src="${esc(p.source)}">View code</button>` : ""}
+      <button class="ghost" data-toggle="${esc(p.name)}">${enabled ? "Disable" : "Enable"}</button>
+      ${p.origin !== "builtin" ? `<button class="ghost danger" data-del="${esc(p.name)}">Delete</button>` : ""}
+    </div></div>`;
+}
+
+async function loadPlugins() {
+  const { plugins } = await api("/api/plugins");
+  pluginCache = plugins || {};
+  renderKindTabs();
+  renderPlugins();
+}
+
+async function togglePlugin(name) {
+  await api(`/api/plugins/${activeKind}/${encodeURIComponent(name)}/toggle`, { method: "POST" });
+  loadPlugins();
+}
+
+async function deletePlugin(name) {
+  if (!confirm(`Delete ${activeKind} "${name}"? This removes the file.`)) return;
+  const r = await api(`/api/plugins/${activeKind}/${encodeURIComponent(name)}`, { method: "DELETE" });
+  if (r.error) return alert(r.error);
+  loadPlugins();
+}
+
+async function viewSource(path, kind) {
+  const name = path.split("/").pop().replace(/\.[^.]+$/, "");
+  const data = await api(`/api/plugins/${kind}/${encodeURIComponent(name)}`);
+  modal(`Source: ${esc(data.source || name)}`, `<pre class="src">${esc(data.source_text || "(no source)")}</pre>`, []);
+}
+
+function modal(title, bodyHtml, buttons) {
+  const el = document.createElement("div");
+  el.className = "modal";
+  el.innerHTML = `<div class="box"><h3>${title}</h3>${bodyHtml}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px" id="mbtns"></div></div>`;
+  document.body.appendChild(el);
+  const btns = el.querySelector("#mbtns");
+  buttons.forEach(b => {
+    const btn = document.createElement("button");
+    btn.textContent = b.label;
+    if (b.ghost) btn.className = "ghost";
+    btn.addEventListener("click", () => b.onClick ? b.onClick(el) : el.remove());
+    btns.appendChild(btn);
+  });
+  el.addEventListener("click", e => { if (e.target === el) el.remove(); });
+  return el;
+}
+
+function openCreate(kind) {
+  const isFeed = kind === "feed";
+  const body = `
+    <label>Name (lowercase, underscore)</label>
+    <input id="pk-name" placeholder="my_${kind}">
+    <label>Description</label>
+    <input id="pk-desc" placeholder="what it does">
+    ${isFeed ? `<label>REST URL (use {symbol})</label>
+      <input id="pk-url" placeholder="https://api.example.com/quote/{symbol}">
+      <div class="desc" style="margin-top:8px">Creates a declarative feed spec.
+      Edit the generated TOML to map your response fields.</div>`
+    : `<div class="desc" style="margin-top:8px">Creates a starter .py file you
+      edit in your own editor.</div>`}`;
+  modal(`New ${kind}`, body, [
+    { label: "Cancel", ghost: true },
+    { label: "Create", onClick: async (el) => {
+        const payload = { kind, name: el.querySelector("#pk-name").value.trim(),
+                          description: el.querySelector("#pk-desc").value.trim() };
+        if (isFeed) payload.url = el.querySelector("#pk-url").value.trim();
+        const r = await api("/api/plugins", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (r.error) return alert(r.error);
+        el.remove(); loadPlugins();
+      } },
+  ]);
+}
 </script>
 </body>
 </html>

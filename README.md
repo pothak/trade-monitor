@@ -119,6 +119,8 @@ trade-monitor ledger --limit 30          # the audit trail
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | as-built architecture |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | every intended change, with IDs |
 | [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) | what each source actually returns |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | measured timings; why the engine stays Python |
+| [spec/PLUGINS.md](spec/PLUGINS.md) | strategy + the plugin console (feeds, patterns, validators, deliverers) |
 | [NOTICE.md](NOTICE.md) | third-party licenses |
 
 ## License

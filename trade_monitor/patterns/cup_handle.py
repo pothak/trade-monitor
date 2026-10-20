@@ -125,6 +125,16 @@ class CupWithHandle:
         base_idx = rim_idx + 1 + base_rel
         base_low = lows[base_idx]
 
+        # PAT-6: the low must be a *confirmed trough*, not merely the minimum in
+        # a truncated window. On a still-forming base the running low sits at
+        # the very end of the data, so anchoring there mislabels an unfinished
+        # decline as a cup base. Require at least one bar of lift off the low,
+        # so the base is something price has actually left.
+        if base_idx >= n - 1:
+            return None
+        if highs[base_idx + 1] < base_low:  # price still making new lows
+            return None
+
         depth_pct = _pct_drop(rim_high, base_low)
         cup_bars = base_idx - rim_idx
 

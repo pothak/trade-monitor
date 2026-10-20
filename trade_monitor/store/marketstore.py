@@ -48,13 +48,13 @@ tries to reach past `as_of` is rejected before it runs.
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 MARKET_SCHEMA = """
 CREATE TABLE IF NOT EXISTS bars (
@@ -275,6 +275,9 @@ class MarketStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(MARKET_SCHEMA)
+        from .migrations import migrate
+
+        migrate(self._conn)
         self._conn.commit()
 
     def close(self) -> None:
@@ -373,6 +376,33 @@ class MarketStore:
             " fetched_at=excluded.fetched_at, rows=excluded.rows, source=excluded.source",
             (symbol, kind, time.time(), rows, source),
         )
+
+    def log_fetch(self, symbol: str, kind: str = "bars", *,
+                  rows: int = 0, source: str = "feed") -> None:
+        """Record that `symbol`/`kind` was fetched now. Public, best-effort."""
+        self._log(symbol, kind, rows, source)
+
+    def freshness(self, *, kind: str = "bars") -> dict[str, Any]:
+        """When each symbol was last fetched, newest first."""
+        rows = self._conn.execute(
+            "SELECT symbol, kind, fetched_at, rows, source FROM fetch_log "
+            "WHERE kind=? ORDER BY fetched_at DESC",
+            (kind,),
+        ).fetchall()
+        now = time.time()
+        return {
+            "items": [
+                {
+                    "symbol": r["symbol"],
+                    "fetched_at": r["fetched_at"],
+                    "age_s": round(now - r["fetched_at"], 1),
+                    "rows": r["rows"],
+                    "source": r["source"],
+                }
+                for r in rows
+            ],
+            "count": len(rows),
+        }
 
     # -- reads -----------------------------------------------------------
 

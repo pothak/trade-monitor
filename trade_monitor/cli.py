@@ -34,15 +34,18 @@ def _default_paths() -> dict[str, Path]:
 
 def cmd_scan(args: argparse.Namespace) -> int:
     from .engine import run
+    from .store import Ledger, Store
     from .strategy import REGISTRY as STRATEGIES
     from .strategy.loader import discover
-    from .store import Ledger, MarketStore, Store
     from .universe import build_plan, load_nse, load_sp500
 
     p = _default_paths()
     store = Store(p["engine"] if not args.db else args.db)
     ledger = Ledger.at(p["ledger"])
     discover(STRATEGIES, [Path(args.strategies) if args.strategies else Path("strategies")])
+    from .datafeed import discover_feeds
+
+    discover_feeds()
 
     if args.symbols:
         symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
@@ -51,17 +54,28 @@ def cmd_scan(args: argparse.Namespace) -> int:
         plan = build_plan(uni, limit=args.limit)
         symbols = [item.symbol for item in plan.items]
 
+    # Accept both "--strategy a,b" and "--strategy a --strategy b"; default to
+    # every loaded strategy when none is named.
+    names = None
+    if args.strategy:
+        names = [n.strip() for chunk in args.strategy for n in chunk.split(",") if n.strip()]
+    else:
+        names = STRATEGIES.names()
+    if not names:
+        print("no strategies loaded", file=sys.stderr)
+        return 2
+
     from .datafeed import REGISTRY as FEEDS
 
     feed = FEEDS.create("yfinance")
     ledger.write(
         "run.started",
         subject="scan",
-        summary=f"scan {len(symbols)} symbols with {args.strategy}",
+        summary=f"scan {len(symbols)} symbols with {','.join(names)}",
     )
 
     reports = run(
-        strategy_names=args.strategy,
+        strategy_names=names,
         symbols=symbols,
         feed=feed,
         market=args.market,
@@ -78,6 +92,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
             print(f"   {t.symbol:14s} {getattr(t, 'grade', '?'):2s} "
                   f"conf={getattr(t, 'confidence', 0)}")
         total_hits += rep.hits
+        if rep.stages:
+            from .timing import Stages
+
+            st = Stages()
+            for row in rep.stages.get("stages", []):
+                st.add(row["stage"], row["seconds"], row["count"])
+            print("\n" + st.report())
 
     ledger.write(
         "run.finished",
@@ -85,6 +106,30 @@ def cmd_scan(args: argparse.Namespace) -> int:
         summary=f"scan finished: {total_hits} hits",
     )
     store.close()
+    return 0
+
+
+def cmd_plugins(args: argparse.Namespace) -> int:
+    from .plugins import all_manifests
+    from .strategy import REGISTRY as STRATEGIES
+    from .strategy.loader import discover
+
+    discover(STRATEGIES, [Path("strategies")])
+    manifests = all_manifests()
+    if getattr(args, "kind", None):
+        manifests = {args.kind: manifests.get(args.kind, [])}
+    for kind, items in manifests.items():
+        print(f"\n== {kind} ({len(items)}) ==")
+        for m in items:
+            flags = []
+            if not m.enabled:
+                flags.append("disabled")
+            if m.status == "error":
+                flags.append("ERROR")
+            tag = f"  [{', '.join(flags)}]" if flags else ""
+            print(f"  {m.name:24s} {m.origin:8s} v{m.version}{tag}")
+            if m.reason:
+                print(f"      {m.reason}")
     return 0
 
 
@@ -99,7 +144,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 def cmd_strategies(args: argparse.Namespace) -> int:
     from .strategy import REGISTRY as STRATEGIES
-    from .strategy.loader import discover, LoadReport
+    from .strategy.loader import LoadReport, discover
 
     dirs = [Path(args.strategies)] if args.strategies else None
     report: LoadReport = discover(STRATEGIES, dirs)
@@ -166,9 +211,14 @@ def cmd_ledger(args: argparse.Namespace) -> int:
     p = _default_paths()
     led = Ledger.at(p["ledger"] if not args.db else args.db)
     if args.verify:
-        ok = led.verify() if hasattr(led, "verify") else None
-        print("ledger verify:", "OK" if ok else "not implemented")
-        return 0
+        r = led.verify()
+        status = "OK" if r["ok"] else "BROKEN"
+        print(f"ledger verify: {status}")
+        print(f"  checked {r['checked']} rows, {r['chained']} chained")
+        if not r["ok"]:
+            print(f"  first break at seq {r['first_break_seq']}: {r['reason']}")
+        led.close()
+        return 0 if r["ok"] else 1
     for e in led.tail(args.limit):
         print(f"{e.seq:6d}  {e.ts}  {e.kind:20s}  {e.summary}")
     print(f"\n{led.count()} events, kinds: {[k for k, _ in led.kinds()]}")
@@ -177,6 +227,50 @@ def cmd_ledger(args: argparse.Namespace) -> int:
 
 def cmd_version(args: argparse.Namespace) -> int:
     print(f"trade-monitor {__version__}")
+    return 0
+
+
+def cmd_backtest(args: argparse.Namespace) -> int:
+    """Walk a strategy forward through history and print an honest verdict."""
+    from .backtest import backtest
+    from .datafeed import REGISTRY as FEEDS
+    from .strategy import REGISTRY as STRATEGIES
+    from .strategy.loader import discover
+
+    discover(STRATEGIES, [Path(args.strategies) if args.strategies else Path("strategies")])
+    names = [n.strip() for s in (args.strategy or []) for n in s.split(",") if n.strip()]
+    if not names:
+        names = STRATEGIES.names()
+    feed = FEEDS.create("yfinance")
+
+    for sym in [s.strip().upper() for s in args.symbols.split(",") if s.strip()]:
+        try:
+            series = feed.price_series(sym, days=args.days)
+            fund = feed.fundamentals(sym)
+        except Exception as exc:  # noqa: BLE001
+            print(f"{sym}: data error {type(exc).__name__}: {exc}")
+            continue
+        for name in names:
+            try:
+                strat = STRATEGIES.create(name)
+            except KeyError:
+                continue
+            res = backtest(
+                symbol=sym, series=series, fundamentals=fund, strategy=strat,
+                horizon_days=args.horizon, windows=args.windows,
+            )
+            s = res.summary()
+            print(f"\n== {sym} · {name} ==")
+            print(f"  verdict         {s['verdict']}")
+            print(f"  signals         {s['signals']} over {s['windows_tested']} windows")
+            print(f"  pivot cleared   {s['pivot_hit_rate']}")
+            print(f"  target hit      {s['target_hit_rate']}  (measured move is a "
+                  f"ceiling, rarely reached)")
+            print(f"  avg return      {s['avg_return_pct']}%   "
+                  f"baseline {s['baseline_avg_return_pct']}%   "
+                  f"edge {s['edge_vs_baseline']}")
+            for n in s["notes"]:
+                print(f"  note: {n}")
     return 0
 
 
@@ -211,6 +305,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strategies", help="strategy directory to scan")
     p.set_defaults(func=cmd_strategies)
 
+    p = sub.add_parser("plugins", help="list all plugins of every kind")
+    p.add_argument("--kind", help="filter to one kind")
+    p.set_defaults(func=cmd_plugins)
+
     p = sub.add_parser("seed", help="pull data into the market store")
     p.add_argument("--market", "-m", default="IN", choices=["IN", "US"])
     p.add_argument("--symbols", help="comma-separated symbols")
@@ -225,6 +323,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--db", help="ledger db path")
     p.set_defaults(func=cmd_ledger)
 
+    p = sub.add_parser("backtest", help="walk a strategy through history")
+    p.add_argument("--symbols", "-S", required=True, help="comma-separated symbols")
+    p.add_argument("--strategy", "-s", action="append", default=None,
+                   help="strategy name (repeatable or comma-separated); default: all")
+    p.add_argument("--days", type=int, default=900, help="history to load")
+    p.add_argument("--horizon", type=int, default=60, help="forward window in trading days")
+    p.add_argument("--windows", type=int, default=24, help="max signal dates to test")
+    p.add_argument("--strategies", help="strategy directory to scan")
+    p.set_defaults(func=cmd_backtest)
+
     p = sub.add_parser("version", help="print version")
     p.set_defaults(func=cmd_version)
 
@@ -237,9 +345,6 @@ def main(argv: list[str] | None = None) -> int:
     if not getattr(args, "command", None):
         parser.print_help()
         return 0
-    if args.command == "scan" and not args.strategy:
-        from .strategy import REGISTRY as STRATEGIES
-        args.strategy = STRATEGIES.names() or ["canslim"]
     return args.func(args)
 
 
